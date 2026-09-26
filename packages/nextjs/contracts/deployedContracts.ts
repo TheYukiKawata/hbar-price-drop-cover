@@ -6,580 +6,760 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-hbar/contract";
 
 const deployedContracts = {
   296: {
-    HederaToken: {
-      address: "0xa510c1b5ebcefb83267f4f2bae2765611606c85a",
+    PriceDropCover: {
+      address: "0x0000000000000000000000000000000000000000",
+      deployedOnBlock: 1,
       abi: [
         {
+          inputs: [
+            {
+              components: [
+                {
+                  internalType: "contract AggregatorV3Interface",
+                  name: "priceFeed",
+                  type: "address",
+                },
+                {
+                  internalType: "uint256",
+                  name: "triggerDropBps",
+                  type: "uint256",
+                },
+                {
+                  internalType: "uint256",
+                  name: "premiumBps",
+                  type: "uint256",
+                },
+                {
+                  internalType: "uint256",
+                  name: "coverPeriod",
+                  type: "uint256",
+                },
+                {
+                  internalType: "uint256",
+                  name: "maxPriceAge",
+                  type: "uint256",
+                },
+                {
+                  internalType: "uint256",
+                  name: "resolutionGasLimit",
+                  type: "uint256",
+                },
+              ],
+              internalType: "struct PriceDropCover.CoverTerms",
+              name: "terms",
+              type: "tuple",
+            },
+          ],
+          stateMutability: "nonpayable",
           type: "constructor",
-          inputs: [
-            {
-              name: "initialOwner",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          stateMutability: "nonpayable",
         },
         {
-          type: "function",
-          name: "allowance",
           inputs: [
             {
-              name: "owner",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "spender",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
               internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "approve",
-          inputs: [
-            {
-              name: "spender",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "value",
+              name: "policyId",
               type: "uint256",
+            },
+            {
               internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "bool",
-              internalType: "bool",
-            },
-          ],
-          stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "balanceOf",
-          inputs: [
-            {
-              name: "account",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
+              name: "expiry",
               type: "uint256",
-              internalType: "uint256",
             },
           ],
-          stateMutability: "view",
+          name: "CoverNotExpired",
+          type: "error",
         },
         {
-          type: "function",
-          name: "decimals",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "uint8",
-              internalType: "uint8",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "mint",
           inputs: [
             {
-              name: "to",
-              type: "address",
               internalType: "address",
+              name: "recipient",
+              type: "address",
             },
             {
+              internalType: "uint256",
               name: "amount",
               type: "uint256",
-              internalType: "uint256",
             },
           ],
-          outputs: [],
-          stateMutability: "nonpayable",
+          name: "HbarTransferFailed",
+          type: "error",
         },
         {
-          type: "function",
-          name: "name",
-          inputs: [],
-          outputs: [
+          inputs: [
             {
-              name: "",
-              type: "string",
               internalType: "string",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "owner",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "renounceOwnership",
-          inputs: [],
-          outputs: [],
-          stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "symbol",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
+              name: "operation",
               type: "string",
-              internalType: "string",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "totalSupply",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "transfer",
-          inputs: [
-            {
-              name: "to",
-              type: "address",
-              internalType: "address",
             },
             {
-              name: "value",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "bool",
-              internalType: "bool",
-            },
-          ],
-          stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "transferFrom",
-          inputs: [
-            {
-              name: "from",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "to",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "value",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "bool",
-              internalType: "bool",
-            },
-          ],
-          stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "transferOwnership",
-          inputs: [
-            {
-              name: "newOwner",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [],
-          stateMutability: "nonpayable",
-        },
-        {
-          type: "event",
-          name: "Approval",
-          inputs: [
-            {
-              name: "owner",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "spender",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "value",
-              type: "uint256",
-              indexed: false,
-              internalType: "uint256",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "event",
-          name: "OwnershipTransferred",
-          inputs: [
-            {
-              name: "previousOwner",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "newOwner",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "event",
-          name: "Transfer",
-          inputs: [
-            {
-              name: "from",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "to",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "value",
-              type: "uint256",
-              indexed: false,
-              internalType: "uint256",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "error",
-          name: "ERC20InsufficientAllowance",
-          inputs: [
-            {
-              name: "spender",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "allowance",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "needed",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "ERC20InsufficientBalance",
-          inputs: [
-            {
-              name: "sender",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "balance",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "needed",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "ERC20InvalidApprover",
-          inputs: [
-            {
-              name: "approver",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "ERC20InvalidReceiver",
-          inputs: [
-            {
-              name: "receiver",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "ERC20InvalidSender",
-          inputs: [
-            {
-              name: "sender",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "ERC20InvalidSpender",
-          inputs: [
-            {
-              name: "spender",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "OwnableInvalidOwner",
-          inputs: [
-            {
-              name: "owner",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "OwnableUnauthorizedAccount",
-          inputs: [
-            {
-              name: "account",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-        },
-      ],
-      inheritedFunctions: {},
-      deployedOnBlock: 33578755,
-    },
-    HtsTokenCreator: {
-      address: "0x03fcda15d3955b20557028db9fabe6f5847f00ab",
-      abi: [
-        {
-          type: "function",
-          name: "HTS",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "SUCCESS",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "int64",
               internalType: "int64",
+              name: "responseCode",
+              type: "int64",
+            },
+          ],
+          name: "HederaCallFailed",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "requested",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "available",
+              type: "uint256",
+            },
+          ],
+          name: "InsufficientFreeCapital",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "requested",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "owned",
+              type: "uint256",
+            },
+          ],
+          name: "InsufficientShares",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "int256",
+              name: "answer",
+              type: "int256",
+            },
+          ],
+          name: "InvalidPrice",
+          type: "error",
+        },
+        {
+          inputs: [],
+          name: "InvalidTerms",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "timestamp",
+              type: "uint256",
+            },
+          ],
+          name: "NoRoundFoundBefore",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "expiry",
+              type: "uint256",
+            },
+          ],
+          name: "NoScheduleCapacity",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+          ],
+          name: "PolicyNotActive",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "token",
+              type: "address",
+            },
+          ],
+          name: "PolicyTokenAlreadyCreated",
+          type: "error",
+        },
+        {
+          inputs: [],
+          name: "PolicyTokenNotCreated",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint80",
+              name: "roundId",
+              type: "uint80",
+            },
+            {
+              internalType: "uint256",
+              name: "timestamp",
+              type: "uint256",
+            },
+          ],
+          name: "RoundNotLastBefore",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "updatedAt",
+              type: "uint256",
+            },
+          ],
+          name: "StalePrice",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "expected",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "received",
+              type: "uint256",
+            },
+          ],
+          name: "WrongPremium",
+          type: "error",
+        },
+        {
+          inputs: [],
+          name: "ZeroAmount",
+          type: "error",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+            {
+              indexed: true,
+              internalType: "address",
+              name: "holder",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "payout",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "premium",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "int256",
+              name: "strikePrice",
+              type: "int256",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "expiry",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "address",
+              name: "resolutionSchedule",
+              type: "address",
+            },
+          ],
+          name: "CoverBought",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "underwriter",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "shares",
+              type: "uint256",
+            },
+          ],
+          name: "Deposited",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+            {
+              indexed: true,
+              internalType: "enum PriceDropCover.PolicyStatus",
+              name: "outcome",
+              type: "uint8",
+            },
+            {
+              indexed: false,
+              internalType: "uint80",
+              name: "roundId",
+              type: "uint80",
+            },
+            {
+              indexed: false,
+              internalType: "int256",
+              name: "priceAtExpiry",
+              type: "int256",
+            },
+            {
+              indexed: false,
+              internalType: "address",
+              name: "holder",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "amountPaid",
+              type: "uint256",
+            },
+          ],
+          name: "PolicyResolved",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "token",
+              type: "address",
+            },
+          ],
+          name: "PolicyTokenCreated",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "underwriter",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "shares",
+              type: "uint256",
+            },
+          ],
+          name: "Withdrawn",
+          type: "event",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "underwriter",
+              type: "address",
+            },
+          ],
+          name: "assetsOf",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
             },
           ],
           stateMutability: "view",
+          type: "function",
         },
         {
-          type: "function",
-          name: "createToken",
           inputs: [
             {
-              name: "name",
-              type: "string",
-              internalType: "string",
-            },
-            {
-              name: "symbol",
-              type: "string",
-              internalType: "string",
-            },
-            {
-              name: "initialSupply",
-              type: "uint256",
               internalType: "uint256",
-            },
-            {
-              name: "decimals",
-              type: "uint8",
-              internalType: "uint8",
+              name: "payout",
+              type: "uint256",
             },
           ],
+          name: "buyCover",
           outputs: [
             {
-              name: "tokenAddress",
-              type: "address",
-              internalType: "address",
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
             },
           ],
           stateMutability: "payable",
+          type: "function",
         },
         {
-          type: "function",
-          name: "mintToken",
-          inputs: [
-            {
-              name: "token",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "amount",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
+          inputs: [],
+          name: "coverPeriod",
           outputs: [
             {
-              name: "newTotalSupply",
-              type: "int64",
-              internalType: "int64",
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "createPolicyToken",
+          outputs: [],
+          stateMutability: "payable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "deposit",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "shares",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "payable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "freeCapital",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "lockedCapital",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "maxPriceAge",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+          ],
+          name: "policies",
+          outputs: [
+            {
+              internalType: "uint128",
+              name: "payout",
+              type: "uint128",
+            },
+            {
+              internalType: "uint128",
+              name: "premium",
+              type: "uint128",
+            },
+            {
+              internalType: "int256",
+              name: "strikePrice",
+              type: "int256",
+            },
+            {
+              internalType: "uint64",
+              name: "expiry",
+              type: "uint64",
+            },
+            {
+              internalType: "enum PriceDropCover.PolicyStatus",
+              name: "status",
+              type: "uint8",
+            },
+            {
+              internalType: "address",
+              name: "resolutionSchedule",
+              type: "address",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "policyToken",
+          outputs: [
+            {
+              internalType: "address",
+              name: "",
+              type: "address",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "premiumBps",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "shares",
+              type: "uint256",
+            },
+          ],
+          name: "previewRedeem",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "priceFeed",
+          outputs: [
+            {
+              internalType: "contract AggregatorV3Interface",
+              name: "",
+              type: "address",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "payout",
+              type: "uint256",
+            },
+          ],
+          name: "quote",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "premium",
+              type: "uint256",
+            },
+            {
+              internalType: "int256",
+              name: "strikePrice",
+              type: "int256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "resolutionGasLimit",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+          ],
+          name: "resolve",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+            {
+              internalType: "uint80",
+              name: "roundId",
+              type: "uint80",
+            },
+          ],
+          name: "resolveWithRound",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "underwriter",
+              type: "address",
+            },
+          ],
+          name: "sharesOf",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "shares",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "totalAssets",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "totalShares",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "triggerDropBps",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "shares",
+              type: "uint256",
+            },
+          ],
+          name: "withdraw",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
             },
           ],
           stateMutability: "nonpayable",
-        },
-        {
-          type: "event",
-          name: "TokenCreated",
-          inputs: [
-            {
-              name: "tokenAddress",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "name",
-              type: "string",
-              indexed: false,
-              internalType: "string",
-            },
-            {
-              name: "symbol",
-              type: "string",
-              indexed: false,
-              internalType: "string",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "event",
-          name: "TokenMinted",
-          inputs: [
-            {
-              name: "tokenAddress",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "newTotalSupply",
-              type: "int64",
-              indexed: false,
-              internalType: "int64",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "error",
-          name: "HtsCreateFailed",
-          inputs: [
-            {
-              name: "responseCode",
-              type: "int64",
-              internalType: "int64",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "HtsMintFailed",
-          inputs: [
-            {
-              name: "responseCode",
-              type: "int64",
-              internalType: "int64",
-            },
-          ],
+          type: "function",
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 33578759,
     },
   },
 } as const;
