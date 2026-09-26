@@ -157,17 +157,6 @@ const deployedContracts = {
           inputs: [
             {
               internalType: "uint256",
-              name: "lockedCapital",
-              type: "uint256",
-            },
-          ],
-          name: "LastSharesBackPolicies",
-          type: "error",
-        },
-        {
-          inputs: [
-            {
-              internalType: "uint256",
               name: "timestamp",
               type: "uint256",
             },
@@ -265,6 +254,22 @@ const deployedContracts = {
             },
           ],
           name: "StalePrice",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "remainingShares",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "minShares",
+              type: "uint256",
+            },
+          ],
+          name: "TooFewSharesBackPolicies",
           type: "error",
         },
         {
@@ -535,6 +540,19 @@ const deployedContracts = {
           ],
           name: "Withdrawn",
           type: "event",
+        },
+        {
+          inputs: [],
+          name: "MIN_SHARES_BACKING_POLICIES",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
         },
         {
           inputs: [],

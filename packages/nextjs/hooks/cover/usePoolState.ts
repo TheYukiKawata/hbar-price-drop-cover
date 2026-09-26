@@ -17,6 +17,10 @@ export function usePoolState() {
     functionName: "assetsOf",
     args: [address],
   });
+  const minSharesBackingPoliciesRead = useScaffoldReadContract({
+    contractName: "PriceDropCover",
+    functionName: "MIN_SHARES_BACKING_POLICIES",
+  });
 
   const isError = [
     totalAssetsRead,
@@ -25,14 +29,24 @@ export function usePoolState() {
     totalSharesRead,
     mySharesRead,
     myAssetsRead,
+    minSharesBackingPoliciesRead,
   ].some(read => read.isError);
 
   const totalAssets = totalAssetsRead.data;
   const lockedCapital = lockedCapitalRead.data;
   const freeCapital = freeCapitalRead.data;
   const totalShares = totalSharesRead.data;
+  const minSharesBackingPolicies = minSharesBackingPoliciesRead.data;
+  const myShares = address === undefined ? 0n : mySharesRead.data;
+  const myAssets = address === undefined ? 0n : myAssetsRead.data;
   const isLoaded =
-    totalAssets !== undefined && lockedCapital !== undefined && freeCapital !== undefined && totalShares !== undefined;
+    totalAssets !== undefined &&
+    lockedCapital !== undefined &&
+    freeCapital !== undefined &&
+    totalShares !== undefined &&
+    minSharesBackingPolicies !== undefined &&
+    myShares !== undefined &&
+    myAssets !== undefined;
   if (!isLoaded) return { pool: undefined, isError };
 
   return {
@@ -41,8 +55,9 @@ export function usePoolState() {
       lockedCapital,
       freeCapital,
       totalShares,
-      myShares: mySharesRead.data ?? 0n,
-      myAssets: myAssetsRead.data ?? 0n,
+      minSharesBackingPolicies,
+      myShares,
+      myAssets,
     },
     isError,
   };

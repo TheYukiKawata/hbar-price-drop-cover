@@ -1,4 +1,4 @@
-import { Address, PublicClient } from "viem";
+import { Address, BaseError, ContractFunctionRevertedError, ExecutionRevertedError, PublicClient } from "viem";
 
 const roundDataOutputs = [
   { name: "roundId", type: "uint80" },
@@ -33,11 +33,20 @@ export const aggregatorAbi = [
 ] as const;
 
 const PHASE_ID_SHIFT = 64n;
+const MAX_ROUND_INDEX = (1n << PHASE_ID_SHIFT) - 1n;
 
 export class NoRoundBeforeError extends Error {
   constructor(timestamp: bigint) {
     super(`The Chainlink feed has no round before ${timestamp}.`);
   }
+}
+
+function isRevert(error: unknown) {
+  return (
+    error instanceof BaseError &&
+    error.walk(cause => cause instanceof ContractFunctionRevertedError || cause instanceof ExecutionRevertedError) !==
+      null
+  );
 }
 
 function phaseOf(roundId: bigint) {
@@ -58,15 +67,16 @@ export async function findLastRoundBefore(client: PublicClient, feed: Address, t
         args: [roundId],
       });
       return updatedAt;
-    } catch {
-      return 0n;
+    } catch (error) {
+      if (isRevert(error)) return 0n;
+      throw error;
     }
   };
 
   const lastIndexInPhase = async (phaseId: bigint) => {
     let known = 0n;
     let probe = 1n;
-    while ((await updatedAtOf(roundInPhase(phaseId, probe))) > 0n) {
+    while (probe <= MAX_ROUND_INDEX && (await updatedAtOf(roundInPhase(phaseId, probe))) > 0n) {
       known = probe;
       probe *= 2n;
     }
@@ -95,16 +105,19 @@ export async function findLastRoundBefore(client: PublicClient, feed: Address, t
     abi: aggregatorAbi,
     functionName: "latestRoundData",
   });
-  if (latestUpdatedAt <= timestamp) return latestRoundId;
+  if (latestUpdatedAt > 0n && latestUpdatedAt <= timestamp) return latestRoundId;
 
   let lastIndex = latestRoundId - roundInPhase(phaseOf(latestRoundId), 0n);
+  let nextPhaseHasRounds = false;
   for (let phaseId = phaseOf(latestRoundId); phaseId > 0n; phaseId--) {
-    if (lastIndex > 0n) {
-      const firstUpdatedAt = await updatedAtOf(roundInPhase(phaseId, 1n));
-      if (firstUpdatedAt > 0n && firstUpdatedAt <= timestamp) {
-        return roundInPhase(phaseId, await lastIndexBefore(phaseId, lastIndex));
-      }
+    const firstUpdatedAt = lastIndex > 0n ? await updatedAtOf(roundInPhase(phaseId, 1n)) : 0n;
+    if (firstUpdatedAt > 0n && firstUpdatedAt <= timestamp) {
+      const index = await lastIndexBefore(phaseId, lastIndex);
+      const isProvable = index < lastIndex || nextPhaseHasRounds;
+      if (!isProvable) break;
+      return roundInPhase(phaseId, index);
     }
+    nextPhaseHasRounds = lastIndex > 0n;
     lastIndex = await lastIndexInPhase(phaseId - 1n);
   }
   throw new NoRoundBeforeError(timestamp);

@@ -7,15 +7,23 @@ import { formatTinybars, parseHbarToTinybars } from "~~/utils/cover/hbar";
 
 type Withdrawal = { shares: bigint; minAmount: bigint };
 
-function isOnlyUnderwriterBackingPolicies(pool: PoolState) {
-  return pool.myShares === pool.totalShares && pool.lockedCapital > 0n;
+function maxSharesToWithdraw(pool: PoolState) {
+  if (pool.lockedCapital === 0n) return pool.myShares;
+  const withdrawableFromPool = pool.totalShares - pool.minSharesBackingPolicies;
+  if (withdrawableFromPool <= 0n) return 0n;
+  return pool.myShares < withdrawableFromPool ? pool.myShares : withdrawableFromPool;
 }
 
-function planWithdrawal(pool: PoolState, amount: bigint, sharesForAmount: bigint | undefined): Withdrawal | undefined {
-  const maxShares = isOnlyUnderwriterBackingPolicies(pool) ? pool.myShares - 1n : pool.myShares;
-  if (amount >= pool.myAssets) return { shares: maxShares, minAmount: pool.myAssets > 0n ? pool.myAssets - 1n : 0n };
+type WithdrawalLimit = { maxShares: bigint; available: bigint };
+
+function planWithdrawal(
+  limit: WithdrawalLimit,
+  amount: bigint,
+  sharesForAmount: bigint | undefined,
+): Withdrawal | undefined {
+  if (amount >= limit.available) return { shares: limit.maxShares, minAmount: limit.available };
   if (sharesForAmount === undefined) return undefined;
-  return { shares: sharesForAmount < maxShares ? sharesForAmount : maxShares, minAmount: amount };
+  return { shares: sharesForAmount < limit.maxShares ? sharesForAmount : limit.maxShares, minAmount: amount };
 }
 
 export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
@@ -30,8 +38,16 @@ export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
     query: { enabled: amount !== undefined && amount > 0n },
   });
 
-  const available = pool.myAssets;
-  const withdrawal = amount === undefined ? undefined : planWithdrawal(pool, amount, sharesForAmount);
+  const maxShares = maxSharesToWithdraw(pool);
+  const { data: availableForMaxShares } = useScaffoldReadContract({
+    contractName: "PriceDropCover",
+    functionName: "previewRedeem",
+    args: [maxShares],
+  });
+
+  const available = availableForMaxShares ?? 0n;
+  const withdrawal =
+    amount === undefined ? undefined : planWithdrawal({ maxShares, available }, amount, sharesForAmount);
   const canWithdraw =
     amount !== undefined && amount > 0n && amount <= available && withdrawal !== undefined && withdrawal.shares > 0n;
 
@@ -49,9 +65,10 @@ export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
         You can withdraw up to {formatTinybars(available)} HBAR. This value assumes every active policy pays out. If
         they expire without a payout, the capital returns to the underwriters who stayed.
       </p>
-      {isOnlyUnderwriterBackingPolicies(pool) && (
+      {maxShares < pool.myShares && (
         <p className="m-0 text-sm text-base-content/70">
-          You are the only underwriter while policies are open, so one share stays in the pool until they resolve.
+          While policies are open, a small number of shares must stay in the pool so that someone can claim the capital
+          when the policies resolve. Your withdrawal leaves them in place.
         </p>
       )}
       <label className="flex flex-col gap-2">

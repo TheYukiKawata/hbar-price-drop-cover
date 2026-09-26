@@ -23,7 +23,7 @@ type PolicyCardProps = {
 
 export const PolicyCard = ({ policyId, terms }: PolicyCardProps) => {
   const { targetNetwork } = useTargetNetwork();
-  const { price, error: priceError } = useHbarUsdPrice(terms.priceFeed);
+  const { price } = useHbarUsdPrice(terms.priceFeed);
   const { data: policyTuple, isError: isPolicyError } = useScaffoldReadContract({
     contractName: "PriceDropCover",
     functionName: "policies",
@@ -35,14 +35,14 @@ export const PolicyCard = ({ policyId, terms }: PolicyCardProps) => {
     args: [policyId],
   });
 
-  if (isPolicyError || isUnclaimedPayoutError || priceError) {
+  if (isPolicyError || isUnclaimedPayoutError) {
     return (
       <li className="rounded-2xl bg-base-100 p-4 text-error shadow-sm">
         Could not read policy #{policyId.toString()}.
       </li>
     );
   }
-  if (!policyTuple || !price) return <li className="h-32 rounded-2xl bg-base-300 animate-pulse" />;
+  if (!policyTuple) return <li className="h-32 rounded-2xl bg-base-300 animate-pulse" />;
 
   const policy = policyFromContractTuple(policyTuple);
   const scheduleId = entityIdFromLongZeroAddress(policy.resolutionSchedule as Address);
@@ -59,7 +59,9 @@ export const PolicyCard = ({ policyId, terms }: PolicyCardProps) => {
         <dt className="text-base-content/70">Payout</dt>
         <dd className="m-0 text-right tabular-nums">{formatTinybars(policy.payout)} HBAR</dd>
         <dt className="text-base-content/70">Pays out below</dt>
-        <dd className="m-0 text-right tabular-nums">{formatUsdPrice(policy.strikePrice, price.decimals)}</dd>
+        <dd className="m-0 text-right tabular-nums">
+          {price ? formatUsdPrice(policy.strikePrice, price.decimals) : "Price feed unavailable"}
+        </dd>
         <dt className="text-base-content/70">Expiry</dt>
         <dd className="m-0 text-right">{formatTimestamp(policy.expiry)}</dd>
       </dl>
@@ -86,39 +88,43 @@ export const PolicyCard = ({ policyId, terms }: PolicyCardProps) => {
 
 type SettlementButtonProps = { policyId: bigint; expiry: bigint; priceFeed: Address };
 
+type SettlementRoundSearch = { kind: "found"; roundId: bigint } | { kind: "none" } | { kind: "failed" };
+
 function useSettlementRound({ expiry, priceFeed }: Omit<SettlementButtonProps, "policyId">) {
   const publicClient = usePublicClient();
   const [isSearching, setIsSearching] = useState(false);
 
-  async function findSettlementRound(): Promise<bigint | undefined> {
-    if (!publicClient) return undefined;
+  async function searchSettlementRound(): Promise<SettlementRoundSearch> {
+    if (!publicClient) return { kind: "failed" };
     setIsSearching(true);
     try {
-      return await findLastRoundBefore(publicClient, priceFeed, expiry);
+      return { kind: "found", roundId: await findLastRoundBefore(publicClient, priceFeed, expiry) };
     } catch (error) {
-      if (!(error instanceof NoRoundBeforeError)) notification.error("Could not read the Chainlink feed. Try again.");
-      return undefined;
+      if (error instanceof NoRoundBeforeError) return { kind: "none" };
+      return { kind: "failed" };
     } finally {
       setIsSearching(false);
     }
   }
 
-  return { findSettlementRound, isSearching };
+  return { searchSettlementRound, isSearching };
 }
 
+const FEED_READ_FAILED = "Could not read the Chainlink feed. Try again.";
+
 const ResolveButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
-  const { findSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
+  const { searchSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
   const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
 
   async function resolveWithSettlementRound() {
-    const roundId = await findSettlementRound();
-    if (roundId === undefined) {
-      notification.error("The Chainlink feed has no round before expiry to settle this policy.");
-      return;
+    const search = await searchSettlementRound();
+    if (search.kind === "failed") return notification.error(FEED_READ_FAILED);
+    if (search.kind === "none") {
+      return notification.error("The Chainlink feed has no round that can settle this policy.");
     }
     await writeContractAsync({
       functionName: "resolveWithRound",
-      args: [policyId, roundId],
+      args: [policyId, search.roundId],
       gas: SETTLEMENT_GAS_LIMIT,
     });
   }
@@ -131,13 +137,14 @@ const ResolveButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) =
 };
 
 const VoidButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
-  const { findSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
+  const { searchSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
   const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
 
   async function voidIfUnsettleable() {
-    if ((await findSettlementRound()) !== undefined) {
-      notification.info("This policy can still be settled with a Chainlink round. Use Resolve now.");
-      return;
+    const search = await searchSettlementRound();
+    if (search.kind === "failed") return notification.error(FEED_READ_FAILED);
+    if (search.kind === "found") {
+      return notification.info("This policy can still be settled with a Chainlink round. Use Resolve now.");
     }
     await writeContractAsync({ functionName: "voidUnresolved", args: [policyId], gas: SETTLEMENT_GAS_LIMIT });
   }
