@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Address } from "viem";
+import { Address, BaseError, ContractFunctionRevertedError, ExecutionRevertedError } from "viem";
 import { useAccount, usePublicClient } from "wagmi";
 import { CoverTerms } from "~~/hooks/cover/useCoverTerms";
 import { useHbarUsdPrice } from "~~/hooks/cover/useHbarUsdPrice";
@@ -119,14 +119,22 @@ const FEED_READ_FAILED = "Could not read the Chainlink feed. Try again.";
 
 const ResolveButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
   const { searchSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
+  const checkOnChainResolve = useOnChainResolveCheck(policyId);
   const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
+
+  async function resolveWithContractSearch() {
+    const check = await checkOnChainResolve();
+    if (check === "failed") return notification.error(FEED_READ_FAILED);
+    if (check === "reverts") {
+      return notification.error("The Chainlink feed has no round that can settle this policy.");
+    }
+    await writeContractAsync({ functionName: "resolve", args: [policyId], gas: SETTLEMENT_GAS_LIMIT });
+  }
 
   async function resolveWithSettlementRound() {
     const search = await searchSettlementRound();
     if (search.kind === "failed") return notification.error(FEED_READ_FAILED);
-    if (search.kind === "none") {
-      return notification.error("The Chainlink feed has no round that can settle this policy.");
-    }
+    if (search.kind === "none") return resolveWithContractSearch();
     await writeContractAsync({
       functionName: "resolveWithRound",
       args: [policyId, search.roundId],
@@ -141,13 +149,23 @@ const ResolveButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) =
   );
 };
 
+type OnChainResolveCheck = "succeeds" | "reverts" | "failed";
+
+function isContractRevert(error: unknown) {
+  if (!(error instanceof BaseError)) return false;
+  const revert = error.walk(
+    cause => cause instanceof ContractFunctionRevertedError || cause instanceof ExecutionRevertedError,
+  );
+  return revert !== null;
+}
+
 function useOnChainResolveCheck(policyId: bigint) {
   const publicClient = usePublicClient();
   const { address } = useAccount();
   const { data: cover } = useDeployedContractInfo({ contractName: "PriceDropCover" });
 
-  return async function canResolveOnChain() {
-    if (!publicClient || !cover) return false;
+  return async function checkOnChainResolve(): Promise<OnChainResolveCheck> {
+    if (!publicClient || !cover) return "failed";
     try {
       await publicClient.simulateContract({
         address: cover.address,
@@ -156,16 +174,16 @@ function useOnChainResolveCheck(policyId: bigint) {
         args: [policyId],
         account: address,
       });
-      return true;
-    } catch {
-      return false;
+      return "succeeds";
+    } catch (error) {
+      return isContractRevert(error) ? "reverts" : "failed";
     }
   };
 }
 
 const VoidButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
   const { searchSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
-  const canResolveOnChain = useOnChainResolveCheck(policyId);
+  const checkOnChainResolve = useOnChainResolveCheck(policyId);
   const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
 
   async function voidIfUnsettleable() {
@@ -174,7 +192,9 @@ const VoidButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
     if (search.kind === "found") {
       return notification.info("This policy can still be settled with a Chainlink round. Use Resolve now.");
     }
-    if (await canResolveOnChain()) {
+    const check = await checkOnChainResolve();
+    if (check === "failed") return notification.error(FEED_READ_FAILED);
+    if (check === "succeeds") {
       notification.info("The contract can still settle this policy, so it will be resolved instead of voided.");
       return writeContractAsync({ functionName: "resolve", args: [policyId], gas: SETTLEMENT_GAS_LIMIT });
     }
