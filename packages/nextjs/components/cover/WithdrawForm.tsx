@@ -2,15 +2,20 @@
 
 import { FormEvent, useState } from "react";
 import { PoolState } from "~~/hooks/cover/usePoolState";
-import { useScaffoldWriteContract } from "~~/hooks/scaffold-hbar";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-hbar";
 import { formatTinybars, parseHbarToTinybars } from "~~/utils/cover/hbar";
 
-function sharesForAmount(pool: PoolState, amount: bigint): bigint {
-  return (amount * (pool.totalShares + 1n)) / (pool.freeCapital + 1n);
+type Withdrawal = { shares: bigint; minAmount: bigint };
+
+function isOnlyUnderwriterBackingPolicies(pool: PoolState) {
+  return pool.myShares === pool.totalShares && pool.lockedCapital > 0n;
 }
 
-function sharesToBurn(pool: PoolState, amount: bigint): bigint {
-  return amount >= pool.myAssets ? pool.myShares : sharesForAmount(pool, amount);
+function planWithdrawal(pool: PoolState, amount: bigint, sharesForAmount: bigint | undefined): Withdrawal | undefined {
+  const maxShares = isOnlyUnderwriterBackingPolicies(pool) ? pool.myShares - 1n : pool.myShares;
+  if (amount >= pool.myAssets) return { shares: maxShares, minAmount: pool.myAssets > 0n ? pool.myAssets - 1n : 0n };
+  if (sharesForAmount === undefined) return undefined;
+  return { shares: sharesForAmount < maxShares ? sharesForAmount : maxShares, minAmount: amount };
 }
 
 export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
@@ -18,14 +23,22 @@ export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
   const amount = parseHbarToTinybars(amountText);
   const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
 
+  const { data: sharesForAmount } = useScaffoldReadContract({
+    contractName: "PriceDropCover",
+    functionName: "sharesToWithdraw",
+    args: [amount],
+    query: { enabled: amount !== undefined && amount > 0n },
+  });
+
   const available = pool.myAssets;
-  const shares = amount === undefined ? 0n : sharesToBurn(pool, amount);
-  const canWithdraw = amount !== undefined && amount > 0n && amount <= available && shares > 0n;
+  const withdrawal = amount === undefined ? undefined : planWithdrawal(pool, amount, sharesForAmount);
+  const canWithdraw =
+    amount !== undefined && amount > 0n && amount <= available && withdrawal !== undefined && withdrawal.shares > 0n;
 
   async function withdraw(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canWithdraw) return;
-    await writeContractAsync({ functionName: "withdraw", args: [shares] });
+    await writeContractAsync({ functionName: "withdraw", args: [withdrawal.shares, withdrawal.minAmount] });
     setAmountText("");
   }
 
@@ -36,6 +49,11 @@ export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
         You can withdraw up to {formatTinybars(available)} HBAR. This value assumes every active policy pays out. If
         they expire without a payout, the capital returns to the underwriters who stayed.
       </p>
+      {isOnlyUnderwriterBackingPolicies(pool) && (
+        <p className="m-0 text-sm text-base-content/70">
+          You are the only underwriter while policies are open, so one share stays in the pool until they resolve.
+        </p>
+      )}
       <label className="flex flex-col gap-2">
         <span className="text-sm font-medium">Amount (HBAR)</span>
         <div className="join w-full">

@@ -68,17 +68,17 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 
 ### Chainlink
 
-- Settlement must use the last round published **before** expiry. `ChainlinkRounds.lastRoundBefore` walks back from the latest round; `verifyLastRoundBefore` proves a round given by the caller. Never settle with `latestRoundData` at resolution time; a late resolver could pick a later price.
+- Settlement must use the last round published **before** expiry. `ChainlinkRounds.lastRoundBefore` walks back from the latest round; `verifyLastRoundBefore` proves a round given by the caller, and treats the first round of the next phase as the next round when the given round ends its phase. Never settle with `latestRoundData` at resolution time; a late resolver could pick a later price.
 - A round is fresh only if `updatedAt` is within `maxPriceAge` of the time that matters. Stale at purchase reverts `StalePrice`; stale at expiry voids the policy and refunds the premium.
 - Feed addresses are in the deploy script's `CHAINLINK_HBAR_USD_FEEDS` map. The frontend reads the feed address from the contract (`priceFeed()`), so it follows the deployment.
 
 ### Pool accounting
 
 - `lockedCapital` must equal the sum of payouts of active policies. Every path that ends a policy (`_settle`) calls `_unlockCapital` exactly once, and `voidUnresolved` is the escape when no round can settle a policy.
-- `unclaimedPayouts` is HBAR owed to holders whose payout send failed. `totalAssets` excludes it. Never let a failed send revert settlement; `_payHolder` records the amount for `claimPayout` instead.
-- Deposits price shares at `totalAssets`; withdrawals price them at `freeCapital`, as if every open policy pays out. Keep that asymmetry: it stops exits before a loss and deposits that only collect a premium.
+- `unclaimedPayouts` is HBAR owed to holders whose payout send failed, and `reservedResolutionFees` is the prepaid fee of every active policy. `totalAssets` excludes both. Never let a failed send revert settlement; `_payHolder` records the amount for `claimPayout` instead.
+- Deposits price shares at `totalAssets`; withdrawals price them at `freeCapital`, as if every open policy pays out. Keep that asymmetry: it stops exits before a loss and deposits that only collect a premium. `withdraw(shares, minAmount)` reverts if the pool moved against the underwriter, and the last underwriter cannot burn every share while capital is locked.
 - Change status before any external call or HBAR transfer. `_settle` sets the status, unlocks, emits, then pays.
-- Share maths uses a virtual offset of 1 share and 1 tinybar, rounds in the pool's favour, and rejects deposits that mint zero shares.
+- Share maths uses `VIRTUAL_SHARES` (10^6) and 1 virtual tinybar, rounds in the pool's favour, and rejects deposits that mint zero shares. `sharesToWithdraw(amount)` rounds up so the app can ask for an exact amount.
 
 ## Changing the product
 

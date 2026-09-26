@@ -157,6 +157,17 @@ const deployedContracts = {
           inputs: [
             {
               internalType: "uint256",
+              name: "lockedCapital",
+              type: "uint256",
+            },
+          ],
+          name: "LastSharesBackPolicies",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
               name: "timestamp",
               type: "uint256",
             },
@@ -270,6 +281,22 @@ const deployedContracts = {
             },
           ],
           name: "VoidTooEarly",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "minAmount",
+              type: "uint256",
+            },
+          ],
+          name: "WithdrawalBelowMinimum",
           type: "error",
         },
         {
@@ -512,6 +539,19 @@ const deployedContracts = {
         {
           inputs: [],
           name: "UNRESOLVED_VOID_DELAY",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "VIRTUAL_SHARES",
           outputs: [
             {
               internalType: "uint256",
@@ -773,6 +813,19 @@ const deployedContracts = {
         },
         {
           inputs: [],
+          name: "reservedResolutionFees",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
           name: "resolutionFee",
           outputs: [
             {
@@ -841,6 +894,25 @@ const deployedContracts = {
             {
               internalType: "uint256",
               name: "shares",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+          ],
+          name: "sharesToWithdraw",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
               type: "uint256",
             },
           ],
@@ -936,6 +1008,11 @@ const deployedContracts = {
             {
               internalType: "uint256",
               name: "shares",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "minAmount",
               type: "uint256",
             },
           ],

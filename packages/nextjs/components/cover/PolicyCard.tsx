@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Address } from "viem";
 import { usePublicClient } from "wagmi";
 import { CoverTerms } from "~~/hooks/cover/useCoverTerms";
@@ -22,19 +23,19 @@ type PolicyCardProps = {
 
 export const PolicyCard = ({ policyId, terms }: PolicyCardProps) => {
   const { targetNetwork } = useTargetNetwork();
-  const { price } = useHbarUsdPrice(terms.priceFeed);
-  const { data: policyTuple, isError } = useScaffoldReadContract({
+  const { price, error: priceError } = useHbarUsdPrice(terms.priceFeed);
+  const { data: policyTuple, isError: isPolicyError } = useScaffoldReadContract({
     contractName: "PriceDropCover",
     functionName: "policies",
     args: [policyId],
   });
-  const { data: unclaimedPayout } = useScaffoldReadContract({
+  const { data: unclaimedPayout, isError: isUnclaimedPayoutError } = useScaffoldReadContract({
     contractName: "PriceDropCover",
     functionName: "unclaimedPayoutOf",
     args: [policyId],
   });
 
-  if (isError) {
+  if (isPolicyError || isUnclaimedPayoutError || priceError) {
     return (
       <li className="rounded-2xl bg-base-100 p-4 text-error shadow-sm">
         Could not read policy #{policyId.toString()}.
@@ -74,7 +75,7 @@ export const PolicyCard = ({ policyId, terms }: PolicyCardProps) => {
         {isAwaitingResolution && (
           <ResolveButton policyId={policyId} expiry={policy.expiry} priceFeed={terms.priceFeed} />
         )}
-        {canVoid && <VoidButton policyId={policyId} />}
+        {canVoid && <VoidButton policyId={policyId} expiry={policy.expiry} priceFeed={terms.priceFeed} />}
         {unclaimedPayout !== undefined && unclaimedPayout > 0n && (
           <ClaimButton policyId={policyId} amount={unclaimedPayout} />
         )}
@@ -83,44 +84,67 @@ export const PolicyCard = ({ policyId, terms }: PolicyCardProps) => {
   );
 };
 
-const ResolveButton = ({ policyId, expiry, priceFeed }: { policyId: bigint; expiry: bigint; priceFeed: Address }) => {
-  const publicClient = usePublicClient();
-  const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
+type SettlementButtonProps = { policyId: bigint; expiry: bigint; priceFeed: Address };
 
-  async function resolveWithLastRoundBeforeExpiry() {
-    if (!publicClient) return;
+function useSettlementRound({ expiry, priceFeed }: Omit<SettlementButtonProps, "policyId">) {
+  const publicClient = usePublicClient();
+  const [isSearching, setIsSearching] = useState(false);
+
+  async function findSettlementRound(): Promise<bigint | undefined> {
+    if (!publicClient) return undefined;
+    setIsSearching(true);
     try {
-      const roundId = await findLastRoundBefore(publicClient, priceFeed, expiry);
-      await writeContractAsync({
-        functionName: "resolveWithRound",
-        args: [policyId, roundId],
-        gas: SETTLEMENT_GAS_LIMIT,
-      });
+      return await findLastRoundBefore(publicClient, priceFeed, expiry);
     } catch (error) {
-      if (error instanceof NoRoundBeforeError) notification.error(error.message);
-      else throw error;
+      if (!(error instanceof NoRoundBeforeError)) notification.error("Could not read the Chainlink feed. Try again.");
+      return undefined;
+    } finally {
+      setIsSearching(false);
     }
   }
 
+  return { findSettlementRound, isSearching };
+}
+
+const ResolveButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
+  const { findSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
+  const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
+
+  async function resolveWithSettlementRound() {
+    const roundId = await findSettlementRound();
+    if (roundId === undefined) {
+      notification.error("The Chainlink feed has no round before expiry to settle this policy.");
+      return;
+    }
+    await writeContractAsync({
+      functionName: "resolveWithRound",
+      args: [policyId, roundId],
+      gas: SETTLEMENT_GAS_LIMIT,
+    });
+  }
+
   return (
-    <button className="btn btn-sm btn-outline" disabled={isMining} onClick={resolveWithLastRoundBeforeExpiry}>
-      {isMining ? "Resolving…" : "Resolve now"}
+    <button className="btn btn-sm btn-outline" disabled={isSearching || isMining} onClick={resolveWithSettlementRound}>
+      {isSearching || isMining ? "Resolving…" : "Resolve now"}
     </button>
   );
 };
 
-const VoidButton = ({ policyId }: { policyId: bigint }) => {
+const VoidButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
+  const { findSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
   const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
 
+  async function voidIfUnsettleable() {
+    if ((await findSettlementRound()) !== undefined) {
+      notification.info("This policy can still be settled with a Chainlink round. Use Resolve now.");
+      return;
+    }
+    await writeContractAsync({ functionName: "voidUnresolved", args: [policyId], gas: SETTLEMENT_GAS_LIMIT });
+  }
+
   return (
-    <button
-      className="btn btn-sm btn-outline"
-      disabled={isMining}
-      onClick={() =>
-        writeContractAsync({ functionName: "voidUnresolved", args: [policyId], gas: SETTLEMENT_GAS_LIMIT })
-      }
-    >
-      {isMining ? "Voiding…" : "Void and refund the premium"}
+    <button className="btn btn-sm btn-ghost" disabled={isSearching || isMining} onClick={voidIfUnsettleable}>
+      {isSearching || isMining ? "Checking…" : "Void and refund the premium"}
     </button>
   );
 };

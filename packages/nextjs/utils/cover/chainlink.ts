@@ -36,19 +36,58 @@ const PHASE_ID_SHIFT = 64n;
 
 export class NoRoundBeforeError extends Error {
   constructor(timestamp: bigint) {
-    super(`The Chainlink feed has no round before ${timestamp} in its current phase.`);
+    super(`The Chainlink feed has no round before ${timestamp}.`);
   }
+}
+
+function phaseOf(roundId: bigint) {
+  return roundId >> PHASE_ID_SHIFT;
+}
+
+function roundInPhase(phaseId: bigint, index: bigint) {
+  return (phaseId << PHASE_ID_SHIFT) | index;
 }
 
 export async function findLastRoundBefore(client: PublicClient, feed: Address, timestamp: bigint): Promise<bigint> {
   const updatedAtOf = async (roundId: bigint) => {
-    const [, , , updatedAt] = await client.readContract({
-      address: feed,
-      abi: aggregatorAbi,
-      functionName: "getRoundData",
-      args: [roundId],
-    });
-    return updatedAt;
+    try {
+      const [, , , updatedAt] = await client.readContract({
+        address: feed,
+        abi: aggregatorAbi,
+        functionName: "getRoundData",
+        args: [roundId],
+      });
+      return updatedAt;
+    } catch {
+      return 0n;
+    }
+  };
+
+  const lastIndexInPhase = async (phaseId: bigint) => {
+    let known = 0n;
+    let probe = 1n;
+    while ((await updatedAtOf(roundInPhase(phaseId, probe))) > 0n) {
+      known = probe;
+      probe *= 2n;
+    }
+    let missing = probe;
+    while (missing - known > 1n) {
+      const middle = (known + missing) / 2n;
+      if ((await updatedAtOf(roundInPhase(phaseId, middle))) > 0n) known = middle;
+      else missing = middle;
+    }
+    return known;
+  };
+
+  const lastIndexBefore = async (phaseId: bigint, lastIndex: bigint) => {
+    let before = 1n;
+    let after = lastIndex + 1n;
+    while (after - before > 1n) {
+      const middle = (before + after) / 2n;
+      if ((await updatedAtOf(roundInPhase(phaseId, middle))) <= timestamp) before = middle;
+      else after = middle;
+    }
+    return before;
   };
 
   const [latestRoundId, , , latestUpdatedAt] = await client.readContract({
@@ -58,15 +97,15 @@ export async function findLastRoundBefore(client: PublicClient, feed: Address, t
   });
   if (latestUpdatedAt <= timestamp) return latestRoundId;
 
-  const firstRoundInPhase = ((latestRoundId >> PHASE_ID_SHIFT) << PHASE_ID_SHIFT) | 1n;
-  if ((await updatedAtOf(firstRoundInPhase)) > timestamp) throw new NoRoundBeforeError(timestamp);
-
-  let lastBefore = firstRoundInPhase;
-  let firstAfter = latestRoundId;
-  while (firstAfter - lastBefore > 1n) {
-    const middle = (lastBefore + firstAfter) / 2n;
-    if ((await updatedAtOf(middle)) <= timestamp) lastBefore = middle;
-    else firstAfter = middle;
+  let lastIndex = latestRoundId - roundInPhase(phaseOf(latestRoundId), 0n);
+  for (let phaseId = phaseOf(latestRoundId); phaseId > 0n; phaseId--) {
+    if (lastIndex > 0n) {
+      const firstUpdatedAt = await updatedAtOf(roundInPhase(phaseId, 1n));
+      if (firstUpdatedAt > 0n && firstUpdatedAt <= timestamp) {
+        return roundInPhase(phaseId, await lastIndexBefore(phaseId, lastIndex));
+      }
+    }
+    lastIndex = await lastIndexInPhase(phaseId - 1n);
   }
-  return lastBefore;
+  throw new NoRoundBeforeError(timestamp);
 }
