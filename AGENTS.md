@@ -5,7 +5,7 @@ Briefing for coding agents (Claude Code, Cursor, Codex) working in an app made f
 The app sells parametric cover against an HBAR/USD price drop on Hedera testnet. Three Hedera and ecosystem pieces carry the logic, and each one breaks the product if you remove it:
 
 - **Chainlink HBAR/USD feed**: sets the strike at purchase and decides the outcome at expiry.
-- **Hedera Schedule Service** (system contract `0x16b`, HIP-1215): the contract schedules its own `resolve(policyId)` call at expiry.
+- **Hedera Schedule Service** (system contract `0x16b`, HIP-1215): the contract schedules its own `resolve(policyId)` call 5 seconds after expiry.
 - **Hedera Token Service** (system contract `0x167`): each policy is a serial of an NFT collection the contract owns.
 
 Use the package manager the project was created with (`packageManager` in the root `package.json`, or the lockfile). Examples use `yarn`. With npm, run `npm run <script>` instead.
@@ -62,7 +62,8 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 - `184` is `TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`. A buyer must associate the policy collection, unless the account has free automatic association slots. The frontend checks the mirror node and calls HIP-719 `associate()` on the token address.
 - The contract is the collection's treasury and supply key. Minting goes to the treasury, then `transferNFT` moves the serial to the buyer.
 - `createNonFungibleToken` needs HBAR for the fee (about 1 USD). Send it as `value`; the deploy script sends `POLICY_TOKEN_CREATION_FEE_HBAR` and the contract refunds the unused part.
-- `scheduleCall` fails when the chosen second is full. `buyCover` asks `hasScheduleCapacity` and tries up to 30 seconds after expiry. Keep that check if you change scheduling.
+- `scheduleCall` fails when the chosen second is full. `buyCover` asks `hasScheduleCapacity` for each second from `expiry + RESOLUTION_SCHEDULE_OFFSET` up to 30 seconds later. Keep that check if you change scheduling.
+- `block.timestamp` on Hedera is the start of the current 2-second block, so it can lag the consensus time. A call scheduled at the expiry second reverts `CoverNotExpired`; keep `RESOLUTION_SCHEDULE_OFFSET` above the block length.
 - The contract's own balance pays for scheduled transactions. Buyers prepay it: `buyCover` requires `quote` premium + `resolutionFee`. If you raise `resolutionGasLimit`, raise `resolutionFee` so it covers 80% of the gas limit at the network gas price.
 - Hedera charges at least 80% of the gas limit. Set gas limits close to real use. The frontend constants are `BUY_COVER_GAS_LIMIT` in `BuyCoverForm.tsx` and `SETTLEMENT_GAS_LIMIT` in `SettlementActions.tsx`; the scheduled call uses the `resolutionGasLimit` term.
 

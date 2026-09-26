@@ -116,7 +116,7 @@ describe("PriceDropCover: buying cover", function () {
     expect(await cover.lockedCapital()).to.equal(PAYOUT);
   });
 
-  it("schedules resolution at expiry with the Hedera Schedule Service", async function () {
+  it("schedules resolution just after expiry with the Hedera Schedule Service", async function () {
     const { cover, buyer, scheduleService } = await loadFundedCover();
 
     const { policyId } = await buyCover(cover, buyer);
@@ -124,7 +124,7 @@ describe("PriceDropCover: buying cover", function () {
     const policy = await cover.policies(policyId);
     const scheduled = await scheduleService.scheduledCalls(0n);
     expect(scheduled.to).to.equal(await cover.getAddress());
-    expect(scheduled.expirySecond).to.equal(policy.expiry);
+    expect(scheduled.expirySecond).to.equal(policy.expiry + (await cover.RESOLUTION_SCHEDULE_OFFSET()));
     expect(scheduled.gasLimit).to.equal(RESOLUTION_GAS_LIMIT);
     expect(scheduled.callData).to.equal(cover.interface.encodeFunctionData("resolve", [policyId]));
     expect(policy.resolutionSchedule).to.not.equal(ethers.ZeroAddress);
@@ -133,21 +133,23 @@ describe("PriceDropCover: buying cover", function () {
   it("moves resolution to the next second with schedule capacity", async function () {
     const { cover, buyer, scheduleService } = await loadFundedCover();
     const purchaseTime = BigInt(await time.latest()) + 1_000n;
-    await scheduleService.markSecondFull(purchaseTime + COVER_PERIOD);
-    await scheduleService.markSecondFull(purchaseTime + COVER_PERIOD + 1n);
+    const firstSecond = purchaseTime + COVER_PERIOD + (await cover.RESOLUTION_SCHEDULE_OFFSET());
+    await scheduleService.markSecondFull(firstSecond);
+    await scheduleService.markSecondFull(firstSecond + 1n);
     await time.setNextBlockTimestamp(purchaseTime);
 
     await buyCover(cover, buyer);
 
     const scheduled = await scheduleService.scheduledCalls(0n);
-    expect(scheduled.expirySecond).to.equal(purchaseTime + COVER_PERIOD + 2n);
+    expect(scheduled.expirySecond).to.equal(firstSecond + 2n);
   });
 
   it("rejects cover when no second near expiry has schedule capacity", async function () {
     const { cover, buyer, scheduleService } = await loadFundedCover();
     const purchaseTime = BigInt(await time.latest()) + 1_000n;
     const expiry = purchaseTime + COVER_PERIOD;
-    for (let second = expiry; second <= expiry + 30n; second++) {
+    const firstSecond = expiry + (await cover.RESOLUTION_SCHEDULE_OFFSET());
+    for (let second = firstSecond; second <= firstSecond + 30n; second++) {
       await scheduleService.markSecondFull(second);
     }
     const [premium] = await cover.quote(PAYOUT);

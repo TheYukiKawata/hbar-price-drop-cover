@@ -40,6 +40,7 @@ contract PriceDropCover is UnderwriterPool {
     uint256 private constant BPS = 10_000;
     uint256 private constant MAX_ROUND_LOOKBACK = 24;
     uint256 private constant MAX_SCHEDULE_DELAY = 30;
+    uint256 public constant RESOLUTION_SCHEDULE_OFFSET = 5;
     uint256 private constant PAYOUT_GAS_LIMIT = 50_000;
     uint256 public constant UNRESOLVED_VOID_DELAY = 30 days;
     uint256 private constant SUPPLY_KEY = 16;
@@ -266,7 +267,8 @@ contract PriceDropCover is UnderwriterPool {
     }
 
     function _firstSecondWithCapacity(uint256 expiry) private view returns (uint256) {
-        for (uint256 second = expiry; second <= expiry + MAX_SCHEDULE_DELAY; second++) {
+        uint256 firstSecond = expiry + RESOLUTION_SCHEDULE_OFFSET;
+        for (uint256 second = firstSecond; second <= firstSecond + MAX_SCHEDULE_DELAY; second++) {
             if (HSS.hasScheduleCapacity(second, resolutionGasLimit)) return second;
         }
         revert NoScheduleCapacity(expiry);
