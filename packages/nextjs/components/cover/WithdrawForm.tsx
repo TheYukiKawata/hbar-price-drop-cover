@@ -56,11 +56,8 @@ export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
     <form onSubmit={withdraw} className="rounded-2xl bg-base-100 p-8 flex flex-col gap-4 shadow-sm">
       <h2 className="text-xl font-semibold m-0">Withdraw</h2>
       <p className="m-0 text-sm text-base-content/70">
-        {available === undefined
-          ? "Reading how much you can withdraw…"
-          : `You can withdraw up to ${formatTinybars(available)} HBAR.`}{" "}
-        This value assumes every active policy pays out. If they expire without a payout, the capital returns to the
-        underwriters who stayed.
+        <WithdrawableAmount available={available} isError={pool.isWithdrawableError} /> This value assumes every active
+        policy pays out. If they expire without a payout, the capital returns to the underwriters who stayed.
       </p>
       {maxShares < pool.myShares && (
         <p className="m-0 text-sm text-base-content/70">
@@ -93,4 +90,10 @@ export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
       </button>
     </form>
   );
+};
+
+const WithdrawableAmount = ({ available, isError }: { available: bigint | undefined; isError: boolean }) => {
+  if (available !== undefined) return <>You can withdraw up to {formatTinybars(available)} HBAR.</>;
+  if (isError) return <span className="text-error">Could not read how much you can withdraw. Reload the page.</span>;
+  return <>Reading how much you can withdraw…</>;
 };
