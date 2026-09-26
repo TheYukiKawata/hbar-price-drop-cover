@@ -32,7 +32,7 @@ Deploy the contract to Hedera testnet with one command (see [Deploy your own cop
    - price at or above the strike: the locked capital returns to the pool;
    - no Chainlink update in the 3 hours before expiry, or a price of zero or less: the policy is void and the premium goes back to the holder.
 6. If the holder cannot receive HBAR, for example a contract without a `receive` function, the contract keeps the payout aside. The holder calls `claimPayout(policyId)` from an address that can receive HBAR.
-7. If a policy is still unsettled 30 days after expiry, anyone can call `voidUnresolved(policyId)` to refund the premium and release the capital. This is an escape for a broken feed. The contract cannot prove that no round exists, so it allows the void for any policy that is still unsettled at that point, including one that would have paid out. The scheduled call settles policies at expiry, and anyone can settle one with **Resolve now** during the 30 days. In the app, **Void** appears after 30 days and sends the transaction only when the app finds no Chainlink round that can settle the policy.
+7. If a policy is still unsettled 30 days after expiry, anyone can call `voidUnresolved(policyId)` to refund the premium and release the capital. This is an escape for a broken feed. The contract cannot prove that no round exists, so it allows the void for any policy that is still unsettled at that point, including one that would have paid out. The scheduled call settles policies at expiry, and anyone can settle one with **Resolve now** during the 30 days. In the app, **Void** appears after 30 days and sends the transaction only when neither the app's round search nor a simulated `resolve` call can settle the policy.
 
 ```mermaid
 sequenceDiagram

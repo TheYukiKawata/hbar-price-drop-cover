@@ -68,7 +68,7 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 
 ### Chainlink
 
-- Settlement must use the last round published **before** expiry. `ChainlinkRounds.lastRoundBefore` walks back from the latest round; `verifyLastRoundBefore` proves a round given by the caller: the next round in its phase and the first round of the next phase must each be missing or after expiry, and at least one must exist. Never settle with `latestRoundData` at resolution time; a late resolver could pick a later price.
+- Settlement must use the last round published **before** expiry. `ChainlinkRounds.lastRoundBefore` walks back from the latest round; `verifyLastRoundBefore` proves a round given by the caller: the next round in its phase and the first round of the next phase must each be missing or after expiry, and at least one must exist unless the round is the feed's latest. Never settle with `latestRoundData` at resolution time; a late resolver could pick a later price.
 - A round is fresh only if `updatedAt` is within `maxPriceAge` of the time that matters. Stale at purchase reverts `StalePrice`; stale at expiry voids the policy and refunds the premium.
 - Feed addresses are in the deploy script's `CHAINLINK_HBAR_USD_FEEDS` map. The frontend reads the feed address from the contract (`priceFeed()`), so it follows the deployment.
 
