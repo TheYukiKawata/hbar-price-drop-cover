@@ -64,7 +64,7 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 - `createNonFungibleToken` needs HBAR for the fee (about 1 USD). Send it as `value`; the deploy script sends `POLICY_TOKEN_CREATION_FEE_HBAR`.
 - `scheduleCall` fails when the chosen second is full. `buyCover` asks `hasScheduleCapacity` and tries up to 30 seconds after expiry. Keep that check if you change scheduling.
 - The contract's own balance pays for scheduled transactions. Buyers prepay it: `buyCover` requires `quote` premium + `resolutionFee`. If you raise `resolutionGasLimit`, raise `resolutionFee` so it covers 80% of the gas limit at the network gas price.
-- Hedera charges at least 80% of the gas limit. Set gas limits close to real use. The frontend constants are `BUY_COVER_GAS_LIMIT` in `BuyCoverForm.tsx` and `SETTLEMENT_GAS_LIMIT` in `PolicyCard.tsx`; the scheduled call uses the `resolutionGasLimit` term.
+- Hedera charges at least 80% of the gas limit. Set gas limits close to real use. The frontend constants are `BUY_COVER_GAS_LIMIT` in `BuyCoverForm.tsx` and `SETTLEMENT_GAS_LIMIT` in `SettlementActions.tsx`; the scheduled call uses the `resolutionGasLimit` term.
 
 ### Chainlink
 
