@@ -13,7 +13,7 @@ Use the package manager the project was created with (`packageManager` in the ro
 ## Commands
 
 ```bash
-yarn start                                     # Next.js dev server on http://localhost:3000, reads testnet
+yarn next:dev                                  # Next.js dev server on http://localhost:3000, reads testnet
 yarn test                                      # Hardhat unit tests with system contract mocks
 yarn lint                                      # Next.js and Hardhat ESLint
 yarn next:check-types && yarn hardhat:check-types

@@ -1,3 +1,4 @@
+import { isAddress } from "viem";
 import { useScaffoldReadContract } from "~~/hooks/scaffold-hbar";
 
 export function useCoverTerms() {
@@ -28,7 +29,7 @@ export function useCoverTerms() {
     coverPeriod !== undefined &&
     maxPriceAge !== undefined;
 
-  if (!isLoaded) return undefined;
+  if (!isLoaded || !isAddress(priceFeed) || !isAddress(policyToken)) return undefined;
   return { priceFeed, policyToken, triggerDropBps, premiumBps, coverPeriod, maxPriceAge };
 }
 

@@ -74,7 +74,7 @@ You do not need Foundry, Docker, or a local node.
 
 ```bash
 yarn install
-yarn start
+yarn next:dev
 ```
 
 Open http://localhost:3000. The app reads the testnet deployment in `packages/nextjs/contracts/deployedContracts.ts`.
