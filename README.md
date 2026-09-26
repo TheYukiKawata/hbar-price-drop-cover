@@ -6,7 +6,7 @@ A Scaffold-HBAR template for parametric cover on Hedera. A buyer pays a premium 
 npm create scaffold-hbar@latest -- --template TheYukiKawata/hbar-price-drop-cover
 ```
 
-The scaffolded app points at a contract that is already live on Hedera testnet, so you can buy cover and fund the pool before you deploy anything.
+Deploy the contract to Hedera testnet with one command (see [Deploy your own copy](#deploy-your-own-copy)), then open the app to fund the pool and buy cover.
 
 > This template is experimental and not audited. Use it on testnet. Do not put real money in it without a security review and your own pricing model.
 
@@ -32,7 +32,7 @@ The scaffolded app points at a contract that is already live on Hedera testnet, 
    - price at or above the strike: the locked capital returns to the pool;
    - no Chainlink update in the 3 hours before expiry, or a price of zero or less: the policy is void and the premium goes back to the holder.
 6. If the holder cannot receive HBAR, for example a contract without a `receive` function, the contract keeps the payout aside. The holder calls `claimPayout(policyId)` from an address that can receive HBAR.
-7. If nobody settles a policy within 30 days after expiry, anyone can call `voidUnresolved(policyId)` to refund the premium and release the capital. This is an escape for a broken feed. The app offers **Void** only when it cannot find a Chainlink round to settle with.
+7. If a policy is still unsettled 30 days after expiry, anyone can call `voidUnresolved(policyId)` to refund the premium and release the capital. This is an escape for a broken feed. The contract cannot prove that no round exists, so it allows the void for any policy that is still unsettled at that point, including one that would have paid out. The scheduled call settles policies at expiry, and anyone can settle one with **Resolve now** during the 30 days. In the app, **Void** appears after 30 days and sends the transaction only when the app finds no Chainlink round that can settle the policy.
 
 ```mermaid
 sequenceDiagram
@@ -79,7 +79,7 @@ yarn install
 yarn next:dev
 ```
 
-Open http://localhost:3000. The app reads the testnet deployment in `packages/nextjs/contracts/deployedContracts.ts`.
+Open http://localhost:3000. The app reads the deployment in `packages/nextjs/contracts/deployedContracts.ts`, which the deploy script writes. Until you deploy, the pages say that `PriceDropCover` is not deployed.
 
 - **Cover** (`/`): the Chainlink price, a quote for the payout you type, the buy button, and your policies with their schedule links on HashScan.
 - **Pool** (`/pool`): pool assets, capital locked behind open policies, and deposit and withdraw forms.

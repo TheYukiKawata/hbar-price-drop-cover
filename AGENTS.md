@@ -74,7 +74,7 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 
 ### Pool accounting
 
-- `lockedCapital` must equal the sum of payouts of active policies. Every path that ends a policy (`_settle`) calls `_unlockCapital` exactly once, and `voidUnresolved` is the escape when no round can settle a policy.
+- `lockedCapital` must equal the sum of payouts of active policies. Every path that ends a policy (`_settle`) calls `_unlockCapital` exactly once, and `voidUnresolved` is the escape for a broken feed. It accepts any policy still unsettled 30 days after expiry, even one that could still be settled, so keep settlement paths working and keep the delay long.
 - `unclaimedPayouts` is HBAR owed to holders whose payout send failed, and `reservedResolutionFees` is the prepaid fee of every active policy. `totalAssets` excludes both. Never let a failed send revert settlement; `_payHolder` records the amount for `claimPayout` instead.
 - Deposits price shares at `totalAssets`; withdrawals price them at `freeCapital`, as if every open policy pays out. Keep that asymmetry: it stops exits before a loss and deposits that only collect a premium. `withdraw(shares, minAmount)` reverts if the pool moved against the underwriter, and the last underwriter cannot burn every share while capital is locked.
 - Change status before any external call or HBAR transfer. `_settle` sets the status, unlocks, emits, then pays.
