@@ -91,6 +91,7 @@ Open http://localhost:3000. The app reads the deployment in `packages/nextjs/con
 yarn hardhat:account:generate        # stores an encrypted key in packages/hardhat/.env
 # fund the printed address at https://portal.hedera.com/faucet
 yarn hardhat:deploy --network hederaTestnet
+yarn hardhat:verify:testnet          # publishes the source on Sourcify, shown on HashScan
 ```
 
 The deploy script deploys `PriceDropCover`, creates the policy NFT collection, and regenerates `packages/nextjs/contracts/deployedContracts.ts`. You need about 30 testnet HBAR. The deployment costs about 3 HBAR. Token creation costs about 1 USD in HBAR; the script sends 25 HBAR and the contract refunds what the fee does not use. Deposit HBAR into the pool from the Pool page before you sell cover.
@@ -148,7 +149,17 @@ Hedera's system contracts do not exist on the in-process Hardhat network, and th
 
 ## Testnet proof
 
-<!-- testnet-proof -->
+The contract in `deployedContracts.ts` runs on Hedera testnet with a 10-minute cover period, so you can watch a policy resolve. Its source is verified on [Sourcify](https://repo.sourcify.dev/296/0x4a0638078E4F2DEcD1534181fDe12D016Ec99227).
+
+| Step | HashScan |
+| --- | --- |
+| Deploy `PriceDropCover` (0.0.10734768) | [transaction](https://hashscan.io/testnet/transaction/1790456822.157902144) · [contract](https://hashscan.io/testnet/contract/0.0.10734768) |
+| Create the policy NFT collection over HTS (0.0.10734771) | [transaction](https://hashscan.io/testnet/transaction/1790456828.215514104) · [token](https://hashscan.io/testnet/token/0.0.10734771) |
+| Deposit 20 HBAR into the pool | [transaction](https://hashscan.io/testnet/transaction/1790456849.706935104) |
+| Buy cover: mint and send policy NFT #1, schedule its resolution over HSS | [transaction](https://hashscan.io/testnet/transaction/1790456863.734759807) · [schedule 0.0.10734777](https://hashscan.io/testnet/schedule/0.0.10734777) |
+| Hedera runs the scheduled `resolve(1)` 5 seconds after expiry, with no keeper | [transaction](https://hashscan.io/testnet/transaction/1790457468.053738952) |
+
+The HBAR price stayed above the strike, so policy #1 expired without a payout and its 5 HBAR returned to the pool.
 
 ## Project layout
 

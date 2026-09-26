@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-hbar/contract";
 const deployedContracts = {
   296: {
     PriceDropCover: {
-      address: "0x0000000000000000000000000000000000000000",
+      address: "0x4a0638078E4F2DEcD1534181fDe12D016Ec99227",
       abi: [
         {
           inputs: [
@@ -572,6 +572,19 @@ const deployedContracts = {
         },
         {
           inputs: [],
+          name: "RESOLUTION_SCHEDULE_OFFSET",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
           name: "UNRESOLVED_VOID_DELAY",
           outputs: [
             {
@@ -1067,8 +1080,23 @@ const deployedContracts = {
           type: "function",
         },
       ],
-      inheritedFunctions: {},
-      deployedOnBlock: 1,
+      inheritedFunctions: {
+        MIN_SHARES_BACKING_POLICIES: "contracts/UnderwriterPool.sol",
+        VIRTUAL_SHARES: "contracts/UnderwriterPool.sol",
+        assetsOf: "contracts/UnderwriterPool.sol",
+        deposit: "contracts/UnderwriterPool.sol",
+        freeCapital: "contracts/UnderwriterPool.sol",
+        lockedCapital: "contracts/UnderwriterPool.sol",
+        previewRedeem: "contracts/UnderwriterPool.sol",
+        reservedResolutionFees: "contracts/UnderwriterPool.sol",
+        sharesOf: "contracts/UnderwriterPool.sol",
+        sharesToWithdraw: "contracts/UnderwriterPool.sol",
+        totalAssets: "contracts/UnderwriterPool.sol",
+        totalShares: "contracts/UnderwriterPool.sol",
+        unclaimedPayouts: "contracts/UnderwriterPool.sol",
+        withdraw: "contracts/UnderwriterPool.sol",
+      },
+      deployedOnBlock: 41024038,
     },
   },
 } as const;
