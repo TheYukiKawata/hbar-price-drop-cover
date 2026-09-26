@@ -1,28 +1,6 @@
 import { Address } from "viem";
 import { useReadContract } from "wagmi";
-
-const aggregatorAbi = [
-  {
-    type: "function",
-    name: "latestRoundData",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [
-      { name: "roundId", type: "uint80" },
-      { name: "answer", type: "int256" },
-      { name: "startedAt", type: "uint256" },
-      { name: "updatedAt", type: "uint256" },
-      { name: "answeredInRound", type: "uint80" },
-    ],
-  },
-  {
-    type: "function",
-    name: "decimals",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint8" }],
-  },
-] as const;
+import { aggregatorAbi } from "~~/utils/cover/chainlink";
 
 const PRICE_REFRESH_MS = 30_000;
 

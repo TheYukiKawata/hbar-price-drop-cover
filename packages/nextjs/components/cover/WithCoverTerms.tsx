@@ -10,12 +10,19 @@ type WithCoverTermsProps = {
 
 export const WithCoverTerms = ({ children }: WithCoverTermsProps) => {
   const { data: deployedCover, isLoading } = useDeployedContractInfo({ contractName: "PriceDropCover" });
-  const terms = useCoverTerms();
+  const { terms, isError } = useCoverTerms();
 
   if (!isLoading && !deployedCover) {
     return (
       <p className="m-0 rounded-2xl bg-base-200 p-8">
         PriceDropCover is not deployed on this network. Run <code>yarn hardhat:deploy --network hederaTestnet</code>.
+      </p>
+    );
+  }
+  if (isError && !terms) {
+    return (
+      <p className="m-0 rounded-2xl bg-base-200 p-8 text-error">
+        Could not read the cover terms from Hedera testnet. Check your connection and reload the page.
       </p>
     );
   }

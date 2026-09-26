@@ -1,25 +1,20 @@
 "use client";
 
-import { Address } from "viem";
 import { useAccount } from "wagmi";
 import { PolicyCard } from "~~/components/cover/PolicyCard";
+import { CoverTerms } from "~~/hooks/cover/useCoverTerms";
 import { useOwnedPolicyIds } from "~~/hooks/cover/useOwnedPolicyIds";
 
-type MyPoliciesProps = {
-  policyToken: Address;
-  priceFeed: Address;
-};
-
-export const MyPolicies = ({ policyToken, priceFeed }: MyPoliciesProps) => {
+export const MyPolicies = ({ terms }: { terms: CoverTerms }) => {
   const { isConnected } = useAccount();
-  const { data: policyIds, isPending, error } = useOwnedPolicyIds(policyToken);
+  const { data: policyIds, isPending, error } = useOwnedPolicyIds(terms.policyToken);
 
   return (
     <section className="flex flex-col gap-4">
       <h2 className="text-xl font-semibold m-0">Your policies</h2>
       <PolicyListBody isConnected={isConnected} isPending={isPending} hasError={error !== null} policyIds={policyIds}>
         {policyIds?.map(policyId => (
-          <PolicyCard key={policyId.toString()} policyId={policyId} priceFeed={priceFeed} />
+          <PolicyCard key={policyId.toString()} policyId={policyId} terms={terms} />
         ))}
       </PolicyListBody>
     </section>

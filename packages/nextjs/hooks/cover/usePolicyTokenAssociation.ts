@@ -23,7 +23,7 @@ export function usePolicyTokenAssociation(policyToken: Address | undefined) {
   const queryClient = useQueryClient();
   const queryKey = ["needs-association", targetNetwork.id, address, policyToken];
 
-  const { data: needsAssociation } = useQuery({
+  const { data: needsAssociation, isError: isAssociationCheckFailed } = useQuery({
     queryKey,
     queryFn: () =>
       needsTokenAssociation(mirrorNodeUrl(targetNetwork.id), address!, entityIdFromLongZeroAddress(policyToken!)),
@@ -36,5 +36,5 @@ export function usePolicyTokenAssociation(policyToken: Address | undefined) {
     queryClient.setQueryData(queryKey, false);
   }
 
-  return { needsAssociation, associate, isAssociating: isPending };
+  return { needsAssociation, isAssociationCheckFailed, associate, isAssociating: isPending };
 }

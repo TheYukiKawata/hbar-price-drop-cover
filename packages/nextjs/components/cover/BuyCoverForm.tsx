@@ -20,9 +20,11 @@ export const BuyCoverForm = ({ terms }: { terms: CoverTerms }) => {
   const [payoutText, setPayoutText] = useState("");
   const payout = parseHbarToTinybars(payoutText);
 
-  const pool = usePoolState();
+  const { pool } = usePoolState();
   const { price } = useHbarUsdPrice(terms.priceFeed);
-  const { needsAssociation, associate, isAssociating } = usePolicyTokenAssociation(terms.policyToken);
+  const { needsAssociation, isAssociationCheckFailed, associate, isAssociating } = usePolicyTokenAssociation(
+    terms.policyToken,
+  );
   const { data: quote, error: quoteError } = useScaffoldReadContract({
     contractName: "PriceDropCover",
     functionName: "quote",
@@ -38,7 +40,7 @@ export const BuyCoverForm = ({ terms }: { terms: CoverTerms }) => {
     payout > 0n &&
     quote !== undefined &&
     !exceedsFreeCapital &&
-    !needsAssociation;
+    (needsAssociation === false || isAssociationCheckFailed);
 
   async function buyCover(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,7 +50,7 @@ export const BuyCoverForm = ({ terms }: { terms: CoverTerms }) => {
     await writeContractAsync({
       functionName: "buyCover",
       args: [payout],
-      value: tinybarsToWeibar(premium),
+      value: tinybarsToWeibar(premium + terms.resolutionFee),
       gas: BUY_COVER_GAS_LIMIT,
     });
     setPayoutText("");
@@ -78,6 +80,7 @@ export const BuyCoverForm = ({ terms }: { terms: CoverTerms }) => {
 
       <QuoteSummary
         quote={quote}
+        resolutionFee={terms.resolutionFee}
         priceDecimals={price?.decimals}
         hasQuoteError={quoteError !== null && payout !== undefined}
         expiry={nowInSeconds() + terms.coverPeriod}
@@ -106,12 +109,13 @@ function buyButtonLabel({ isConnected, isMining }: { isConnected: boolean; isMin
 
 type QuoteSummaryProps = {
   quote: readonly [bigint, bigint] | undefined;
+  resolutionFee: bigint;
   priceDecimals: number | undefined;
   hasQuoteError: boolean;
   expiry: bigint;
 };
 
-const QuoteSummary = ({ quote, priceDecimals, hasQuoteError, expiry }: QuoteSummaryProps) => {
+const QuoteSummary = ({ quote, resolutionFee, priceDecimals, hasQuoteError, expiry }: QuoteSummaryProps) => {
   if (hasQuoteError) {
     return <p className="text-error text-sm m-0">No fresh Chainlink price. Cover cannot be priced right now.</p>;
   }
@@ -122,6 +126,10 @@ const QuoteSummary = ({ quote, priceDecimals, hasQuoteError, expiry }: QuoteSumm
     <dl className="grid grid-cols-2 gap-2 m-0 text-sm">
       <dt className="text-base-content/70">Premium</dt>
       <dd className="m-0 text-right tabular-nums">{formatTinybars(premium)} HBAR</dd>
+      <dt className="text-base-content/70">Scheduled resolution fee</dt>
+      <dd className="m-0 text-right tabular-nums">{formatTinybars(resolutionFee)} HBAR</dd>
+      <dt className="font-medium">You pay</dt>
+      <dd className="m-0 text-right tabular-nums font-medium">{formatTinybars(premium + resolutionFee)} HBAR</dd>
       <dt className="text-base-content/70">Pays out below</dt>
       <dd className="m-0 text-right tabular-nums">{formatUsdPrice(strikePrice, priceDecimals)}</dd>
       <dt className="text-base-content/70">Expires</dt>

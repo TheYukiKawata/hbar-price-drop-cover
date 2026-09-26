@@ -8,7 +8,6 @@ const deployedContracts = {
   296: {
     PriceDropCover: {
       address: "0x0000000000000000000000000000000000000000",
-      deployedOnBlock: 1,
       abi: [
         {
           inputs: [
@@ -42,6 +41,11 @@ const deployedContracts = {
                 {
                   internalType: "uint256",
                   name: "resolutionGasLimit",
+                  type: "uint256",
+                },
+                {
+                  internalType: "uint256",
+                  name: "resolutionFee",
                   type: "uint256",
                 },
               ],
@@ -178,6 +182,33 @@ const deployedContracts = {
               name: "policyId",
               type: "uint256",
             },
+            {
+              internalType: "address",
+              name: "holder",
+              type: "address",
+            },
+          ],
+          name: "NotPolicyHolder",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+          ],
+          name: "NothingToClaim",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
           ],
           name: "PolicyNotActive",
           type: "error",
@@ -229,6 +260,22 @@ const deployedContracts = {
           inputs: [
             {
               internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "voidableAt",
+              type: "uint256",
+            },
+          ],
+          name: "VoidTooEarly",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
               name: "expected",
               type: "uint256",
             },
@@ -238,12 +285,23 @@ const deployedContracts = {
               type: "uint256",
             },
           ],
-          name: "WrongPremium",
+          name: "WrongPayment",
           type: "error",
         },
         {
           inputs: [],
           name: "ZeroAmount",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+          ],
+          name: "ZeroShares",
           type: "error",
         },
         {
@@ -331,6 +389,56 @@ const deployedContracts = {
             },
             {
               indexed: true,
+              internalType: "address",
+              name: "holder",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+          ],
+          name: "PayoutClaimed",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+            {
+              indexed: true,
+              internalType: "address",
+              name: "holder",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+          ],
+          name: "PayoutUnclaimed",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+            {
+              indexed: true,
               internalType: "enum PriceDropCover.PolicyStatus",
               name: "outcome",
               type: "uint8",
@@ -402,6 +510,19 @@ const deployedContracts = {
           type: "event",
         },
         {
+          inputs: [],
+          name: "UNRESOLVED_VOID_DELAY",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
           inputs: [
             {
               internalType: "address",
@@ -437,6 +558,19 @@ const deployedContracts = {
             },
           ],
           stateMutability: "payable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+          ],
+          name: "claimPayout",
+          outputs: [],
+          stateMutability: "nonpayable",
           type: "function",
         },
         {
@@ -639,6 +773,19 @@ const deployedContracts = {
         },
         {
           inputs: [],
+          name: "resolutionFee",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
           name: "resolutionGasLimit",
           outputs: [
             {
@@ -743,6 +890,51 @@ const deployedContracts = {
           inputs: [
             {
               internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+          ],
+          name: "unclaimedPayoutOf",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "unclaimedPayouts",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "policyId",
+              type: "uint256",
+            },
+          ],
+          name: "voidUnresolved",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
               name: "shares",
               type: "uint256",
             },
@@ -760,6 +952,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
+      deployedOnBlock: 1,
     },
   },
 } as const;

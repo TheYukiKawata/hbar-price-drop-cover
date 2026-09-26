@@ -24,7 +24,7 @@ const CoverPage: NextPage = () => (
             <BuyCoverForm terms={terms} />
             <CoverTerms terms={terms} />
           </div>
-          <MyPolicies policyToken={terms.policyToken} priceFeed={terms.priceFeed} />
+          <MyPolicies terms={terms} />
         </>
       )}
     </WithCoverTerms>
