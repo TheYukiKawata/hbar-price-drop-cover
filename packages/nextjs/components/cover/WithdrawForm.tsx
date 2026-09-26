@@ -34,9 +34,16 @@ export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
   const maxShares = pool.maxWithdrawShares;
   const available = pool.withdrawable;
   const withdrawal =
-    amount === undefined ? undefined : planWithdrawal({ maxShares, available }, amount, sharesForAmount);
+    amount === undefined || available === undefined
+      ? undefined
+      : planWithdrawal({ maxShares, available }, amount, sharesForAmount);
   const canWithdraw =
-    amount !== undefined && amount > 0n && amount <= available && withdrawal !== undefined && withdrawal.shares > 0n;
+    amount !== undefined &&
+    available !== undefined &&
+    amount > 0n &&
+    amount <= available &&
+    withdrawal !== undefined &&
+    withdrawal.shares > 0n;
 
   async function withdraw(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,8 +56,11 @@ export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
     <form onSubmit={withdraw} className="rounded-2xl bg-base-100 p-8 flex flex-col gap-4 shadow-sm">
       <h2 className="text-xl font-semibold m-0">Withdraw</h2>
       <p className="m-0 text-sm text-base-content/70">
-        You can withdraw up to {formatTinybars(available)} HBAR. This value assumes every active policy pays out. If
-        they expire without a payout, the capital returns to the underwriters who stayed.
+        {available === undefined
+          ? "Reading how much you can withdraw…"
+          : `You can withdraw up to ${formatTinybars(available)} HBAR.`}{" "}
+        This value assumes every active policy pays out. If they expire without a payout, the capital returns to the
+        underwriters who stayed.
       </p>
       {maxShares < pool.myShares && (
         <p className="m-0 text-sm text-base-content/70">
@@ -71,7 +81,8 @@ export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
           <button
             type="button"
             className="btn join-item"
-            onClick={() => setAmountText(formatTinybars(available, 8).replaceAll(",", ""))}
+            disabled={available === undefined}
+            onClick={() => available !== undefined && setAmountText(formatTinybars(available, 8).replaceAll(",", ""))}
           >
             Max
           </button>

@@ -62,9 +62,8 @@ export function usePoolState() {
     args: [maxWithdrawShares],
     query: { enabled: isLoaded },
   });
-  const withdrawable = withdrawableRead.data;
   const hasError = isError || withdrawableRead.isError;
-  if (!isLoaded || withdrawable === undefined) return { pool: undefined, isError: hasError };
+  if (!isLoaded) return { pool: undefined, isError: hasError };
 
   return {
     pool: {
@@ -75,7 +74,7 @@ export function usePoolState() {
       minSharesBackingPolicies,
       myShares,
       maxWithdrawShares,
-      withdrawable,
+      withdrawable: withdrawableRead.data,
     },
     isError: hasError,
   };
