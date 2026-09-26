@@ -1,0 +1,204 @@
+import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { expect } from "chai";
+import { ethers } from "hardhat";
+import {
+  buyCover,
+  COVER_PERIOD,
+  loadCoverWithoutToken,
+  loadFundedCover,
+  MAX_PRICE_AGE,
+  OPENING_PRICE,
+  PAYOUT,
+  POOL_DEPOSIT,
+  PolicyStatus,
+  PREMIUM_BPS,
+  RESOLUTION_GAS_LIMIT,
+  TOKEN_CREATION_FEE,
+  TRIGGER_DROP_BPS,
+} from "./coverFixture";
+
+const TOKEN_NOT_ASSOCIATED_TO_ACCOUNT = 184n;
+
+describe("PriceDropCover: terms and policy token", function () {
+  it("rejects terms that cannot price or settle cover", async function () {
+    const { priceFeed } = await loadCoverWithoutToken();
+    const factory = await ethers.getContractFactory("PriceDropCover");
+    const validTerms = {
+      priceFeed: await priceFeed.getAddress(),
+      triggerDropBps: TRIGGER_DROP_BPS,
+      premiumBps: PREMIUM_BPS,
+      coverPeriod: COVER_PERIOD,
+      maxPriceAge: MAX_PRICE_AGE,
+      resolutionGasLimit: RESOLUTION_GAS_LIMIT,
+    };
+    const invalidTerms = [
+      { ...validTerms, priceFeed: ethers.ZeroAddress },
+      { ...validTerms, triggerDropBps: 0n },
+      { ...validTerms, triggerDropBps: 10_000n },
+      { ...validTerms, premiumBps: 0n },
+      { ...validTerms, coverPeriod: 0n },
+      { ...validTerms, maxPriceAge: 0n },
+      { ...validTerms, resolutionGasLimit: 0n },
+    ];
+
+    for (const terms of invalidTerms) {
+      await expect(factory.deploy(terms)).to.be.revertedWithCustomError(factory, "InvalidTerms");
+    }
+  });
+
+  it("creates the policy NFT collection once", async function () {
+    const { cover } = await loadCoverWithoutToken();
+
+    await expect(cover.createPolicyToken({ value: TOKEN_CREATION_FEE })).to.emit(cover, "PolicyTokenCreated");
+    const policyToken = await cover.policyToken();
+
+    await expect(cover.createPolicyToken({ value: TOKEN_CREATION_FEE }))
+      .to.be.revertedWithCustomError(cover, "PolicyTokenAlreadyCreated")
+      .withArgs(policyToken);
+  });
+
+  it("surfaces the Hedera response code when token creation fails", async function () {
+    const { cover } = await loadCoverWithoutToken();
+    const INSUFFICIENT_TX_FEE = 9n;
+
+    await expect(cover.createPolicyToken({ value: 0n }))
+      .to.be.revertedWithCustomError(cover, "HederaCallFailed")
+      .withArgs("createNonFungibleToken", INSUFFICIENT_TX_FEE);
+  });
+
+  it("refuses to sell cover before the policy token exists", async function () {
+    const { cover, buyer } = await loadCoverWithoutToken();
+
+    await expect(cover.connect(buyer).buyCover(PAYOUT)).to.be.revertedWithCustomError(cover, "PolicyTokenNotCreated");
+  });
+});
+
+describe("PriceDropCover: buying cover", function () {
+  it("quotes the premium and a strike below the live price", async function () {
+    const { cover } = await loadFundedCover();
+
+    const [premium, strikePrice] = await cover.quote(PAYOUT);
+
+    expect(premium).to.equal((PAYOUT * PREMIUM_BPS) / 10_000n);
+    expect(strikePrice).to.equal((OPENING_PRICE * (10_000n - TRIGGER_DROP_BPS)) / 10_000n);
+  });
+
+  it("rounds the premium up", async function () {
+    const { cover } = await loadFundedCover();
+
+    const [premium] = await cover.quote(1n);
+
+    expect(premium).to.equal(1n);
+  });
+
+  it("mints the policy NFT to the buyer and locks the payout", async function () {
+    const { cover, buyer, policyToken } = await loadFundedCover();
+    const [premium, strikePrice] = await cover.quote(PAYOUT);
+
+    const purchase = cover.connect(buyer).buyCover(PAYOUT, { value: premium });
+
+    await expect(purchase).to.changeEtherBalances([buyer, cover], [-premium, premium]);
+    await expect(purchase).to.emit(cover, "CoverBought");
+    const expiry = BigInt(await time.latest()) + COVER_PERIOD;
+    const policy = await cover.policies(1n);
+    expect(await policyToken.ownerOf(1n)).to.equal(buyer.address);
+    expect(policy.payout).to.equal(PAYOUT);
+    expect(policy.premium).to.equal(premium);
+    expect(policy.strikePrice).to.equal(strikePrice);
+    expect(policy.expiry).to.equal(expiry);
+    expect(policy.status).to.equal(PolicyStatus.Active);
+    expect(await cover.lockedCapital()).to.equal(PAYOUT);
+  });
+
+  it("schedules resolution at expiry with the Hedera Schedule Service", async function () {
+    const { cover, buyer, scheduleService } = await loadFundedCover();
+
+    const { policyId } = await buyCover(cover, buyer);
+
+    const policy = await cover.policies(policyId);
+    const scheduled = await scheduleService.scheduledCalls(0n);
+    expect(scheduled.to).to.equal(await cover.getAddress());
+    expect(scheduled.expirySecond).to.equal(policy.expiry);
+    expect(scheduled.gasLimit).to.equal(RESOLUTION_GAS_LIMIT);
+    expect(scheduled.callData).to.equal(cover.interface.encodeFunctionData("resolve", [policyId]));
+    expect(policy.resolutionSchedule).to.not.equal(ethers.ZeroAddress);
+  });
+
+  it("moves resolution to the next second with schedule capacity", async function () {
+    const { cover, buyer, scheduleService } = await loadFundedCover();
+    const purchaseTime = BigInt(await time.latest()) + 1_000n;
+    await scheduleService.markSecondFull(purchaseTime + COVER_PERIOD);
+    await scheduleService.markSecondFull(purchaseTime + COVER_PERIOD + 1n);
+    await time.setNextBlockTimestamp(purchaseTime);
+
+    await buyCover(cover, buyer);
+
+    const scheduled = await scheduleService.scheduledCalls(0n);
+    expect(scheduled.expirySecond).to.equal(purchaseTime + COVER_PERIOD + 2n);
+  });
+
+  it("rejects cover when no second near expiry has schedule capacity", async function () {
+    const { cover, buyer, scheduleService } = await loadFundedCover();
+    const purchaseTime = BigInt(await time.latest()) + 1_000n;
+    const expiry = purchaseTime + COVER_PERIOD;
+    for (let second = expiry; second <= expiry + 30n; second++) {
+      await scheduleService.markSecondFull(second);
+    }
+    const [premium] = await cover.quote(PAYOUT);
+    await time.setNextBlockTimestamp(purchaseTime);
+
+    await expect(cover.connect(buyer).buyCover(PAYOUT, { value: premium }))
+      .to.be.revertedWithCustomError(cover, "NoScheduleCapacity")
+      .withArgs(expiry);
+  });
+
+  it("requires the exact premium", async function () {
+    const { cover, buyer } = await loadFundedCover();
+    const [premium] = await cover.quote(PAYOUT);
+
+    await expect(cover.connect(buyer).buyCover(PAYOUT, { value: premium - 1n }))
+      .to.be.revertedWithCustomError(cover, "WrongPremium")
+      .withArgs(premium, premium - 1n);
+  });
+
+  it("rejects a payout larger than the free capital", async function () {
+    const { cover, buyer } = await loadFundedCover();
+    const payout = POOL_DEPOSIT * 2n;
+    const [premium] = await cover.quote(payout);
+
+    await expect(cover.connect(buyer).buyCover(payout, { value: premium }))
+      .to.be.revertedWithCustomError(cover, "InsufficientFreeCapital")
+      .withArgs(payout, POOL_DEPOSIT + premium);
+  });
+
+  it("rejects a zero payout", async function () {
+    const { cover, buyer } = await loadFundedCover();
+
+    await expect(cover.connect(buyer).buyCover(0n)).to.be.revertedWithCustomError(cover, "ZeroAmount");
+  });
+
+  it("refuses to price cover from a stale feed", async function () {
+    const { cover, buyer } = await loadFundedCover();
+    await time.increase(MAX_PRICE_AGE + 1n);
+
+    await expect(cover.connect(buyer).buyCover(PAYOUT)).to.be.revertedWithCustomError(cover, "StalePrice");
+  });
+
+  it("refuses to price cover from a non-positive answer", async function () {
+    const { cover, buyer, priceFeed } = await loadFundedCover();
+    await priceFeed.pushRound(0n, await time.latest());
+
+    await expect(cover.connect(buyer).buyCover(PAYOUT))
+      .to.be.revertedWithCustomError(cover, "InvalidPrice")
+      .withArgs(0n);
+  });
+
+  it("tells buyers who have not associated the policy token", async function () {
+    const { cover, stranger } = await loadFundedCover();
+    const [premium] = await cover.quote(PAYOUT);
+
+    await expect(cover.connect(stranger).buyCover(PAYOUT, { value: premium }))
+      .to.be.revertedWithCustomError(cover, "HederaCallFailed")
+      .withArgs("transferNFT", TOKEN_NOT_ASSOCIATED_TO_ACCOUNT);
+  });
+});
