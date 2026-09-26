@@ -1,6 +1,20 @@
 import { useAccount } from "wagmi";
 import { useScaffoldReadContract } from "~~/hooks/scaffold-hbar";
 
+type ShareLimits = {
+  lockedCapital: bigint;
+  totalShares: bigint;
+  minSharesBackingPolicies: bigint;
+  myShares: bigint;
+};
+
+function maxSharesToWithdraw({ lockedCapital, totalShares, minSharesBackingPolicies, myShares }: ShareLimits) {
+  if (lockedCapital === 0n) return myShares;
+  const withdrawableFromPool = totalShares - minSharesBackingPolicies;
+  if (withdrawableFromPool <= 0n) return 0n;
+  return myShares < withdrawableFromPool ? myShares : withdrawableFromPool;
+}
+
 export function usePoolState() {
   const { address } = useAccount();
   const totalAssetsRead = useScaffoldReadContract({ contractName: "PriceDropCover", functionName: "totalAssets" });
@@ -10,11 +24,6 @@ export function usePoolState() {
   const mySharesRead = useScaffoldReadContract({
     contractName: "PriceDropCover",
     functionName: "sharesOf",
-    args: [address],
-  });
-  const myAssetsRead = useScaffoldReadContract({
-    contractName: "PriceDropCover",
-    functionName: "assetsOf",
     args: [address],
   });
   const minSharesBackingPoliciesRead = useScaffoldReadContract({
@@ -28,7 +37,6 @@ export function usePoolState() {
     freeCapitalRead,
     totalSharesRead,
     mySharesRead,
-    myAssetsRead,
     minSharesBackingPoliciesRead,
   ].some(read => read.isError);
 
@@ -38,16 +46,25 @@ export function usePoolState() {
   const totalShares = totalSharesRead.data;
   const minSharesBackingPolicies = minSharesBackingPoliciesRead.data;
   const myShares = address === undefined ? 0n : mySharesRead.data;
-  const myAssets = address === undefined ? 0n : myAssetsRead.data;
   const isLoaded =
     totalAssets !== undefined &&
     lockedCapital !== undefined &&
     freeCapital !== undefined &&
     totalShares !== undefined &&
     minSharesBackingPolicies !== undefined &&
-    myShares !== undefined &&
-    myAssets !== undefined;
-  if (!isLoaded) return { pool: undefined, isError };
+    myShares !== undefined;
+  const maxWithdrawShares = isLoaded
+    ? maxSharesToWithdraw({ lockedCapital, totalShares, minSharesBackingPolicies, myShares })
+    : 0n;
+  const withdrawableRead = useScaffoldReadContract({
+    contractName: "PriceDropCover",
+    functionName: "previewRedeem",
+    args: [maxWithdrawShares],
+    query: { enabled: isLoaded },
+  });
+  const withdrawable = withdrawableRead.data;
+  const hasError = isError || withdrawableRead.isError;
+  if (!isLoaded || withdrawable === undefined) return { pool: undefined, isError: hasError };
 
   return {
     pool: {
@@ -57,9 +74,10 @@ export function usePoolState() {
       totalShares,
       minSharesBackingPolicies,
       myShares,
-      myAssets,
+      maxWithdrawShares,
+      withdrawable,
     },
-    isError,
+    isError: hasError,
   };
 }
 

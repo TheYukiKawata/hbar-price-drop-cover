@@ -19,12 +19,12 @@ Deploy the contract to Hedera testnet with one command (see [Deploy your own cop
 | `ChainlinkRounds` | `packages/hardhat/contracts/chainlink/ChainlinkRounds.sol` | Finds and proves the Chainlink round that was live at a given time |
 | Cover page | `packages/nextjs/app/page.tsx` | Live price, quote, buy form, the connected wallet's policies |
 | Pool page | `packages/nextjs/app/pool/page.tsx` | Pool balances, deposit, withdraw |
-| Tests | `packages/hardhat/test/` | 52 unit tests with mocks of HTS, HSS and a Chainlink feed |
+| Tests | `packages/hardhat/test/` | 55 unit tests with mocks of HTS, HSS and a Chainlink feed |
 
 ## How a policy works
 
 1. An underwriter deposits HBAR into the pool and receives shares.
-2. A buyer asks for a payout, for example 50 HBAR. The contract reads the Chainlink HBAR/USD feed and sets the strike 10% below the live price. The buyer pays a premium of 2% of the payout, plus a 1 HBAR fee for the scheduled settlement. The contract sets the fee aside until settlement, so underwriters cannot withdraw it.
+2. A buyer asks for a payout, for example 50 HBAR, and passes the strike they were quoted as a minimum, so a price update before the purchase cannot lower it. The contract reads the Chainlink HBAR/USD feed and sets the strike 10% below the live price. The buyer pays a premium of 2% of the payout, plus a 1 HBAR fee for the scheduled settlement. The contract sets the fee aside until settlement, so underwriters cannot withdraw it.
 3. The contract locks 50 HBAR of pool capital, mints a policy NFT on the Hedera Token Service, and sends it to the buyer.
 4. In the same transaction, the contract calls the Hedera Schedule Service (HIP-1215) to run `resolve(policyId)` at the expiry second.
 5. At expiry, Hedera runs the scheduled call. The contract finds the last Chainlink round published before expiry:
@@ -41,7 +41,7 @@ sequenceDiagram
     participant Feed as Chainlink HBAR/USD
     participant HTS as Hedera Token Service
     participant HSS as Hedera Schedule Service
-    Buyer->>Cover: buyCover(payout) + premium + fee
+    Buyer->>Cover: buyCover(payout, minStrike) + premium + fee
     Cover->>Feed: latestRoundData()
     Cover->>HTS: mintToken + transferNFT (policy NFT)
     Cover->>HSS: scheduleCall(resolve(policyId), expiry)
@@ -55,7 +55,7 @@ The policy NFT is the claim. If the buyer sells or sends the NFT, the new holder
 
 ## Why each integration is load-bearing
 
-**Chainlink Data Feeds.** Cover has no meaning without an agreed price at two moments: when the policy is sold, and when it expires. The contract reads `latestRoundData` for the strike. For settlement it walks back through `getRoundData` to the last round published before expiry, so a late resolution cannot use a later price. The on-chain walk-back stops after 24 rounds. Past that, anyone can call `resolveWithRound(policyId, roundId)`; the contract accepts the round only if it started before expiry and the next round started after it. When the round is the last one of a feed phase, the next round is the first round of the next phase. The app's **Resolve now** button finds the round off-chain with a binary search across phases and always uses `resolveWithRound`.
+**Chainlink Data Feeds.** Cover has no meaning without an agreed price at two moments: when the policy is sold, and when it expires. The contract reads `latestRoundData` for the strike. For settlement it walks back through `getRoundData` to the last round published before expiry, so a late resolution cannot use a later price. The on-chain walk-back stops after 24 rounds. Past that, anyone can call `resolveWithRound(policyId, roundId)`; the contract accepts the round only if its `updatedAt` is at or before expiry, and every later round that exists, the next round in its phase and the first round of the next phase, has an `updatedAt` after expiry. At least one of those later rounds must exist. The app's **Resolve now** button finds the round off-chain with a binary search across phases and always uses `resolveWithRound`.
 
 **Hedera Schedule Service.** Settlement at an exact second usually needs an off-chain keeper. Here the contract schedules its own call (`scheduleCall` on the system contract at `0x16b`) and checks `hasScheduleCapacity`, moving to the next free second when the expiry second is full. The contract pays the scheduled transaction's fee from its balance, so each buyer prepays it with `resolutionFee`. Hedera charges at least 80% of the gas limit, so the fee must cover `resolutionGasLimit` × 0.8 × the gas price (about 0.23 HBAR for 250,000 gas at 114 tinybars per gas).
 

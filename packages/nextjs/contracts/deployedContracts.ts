@@ -259,6 +259,22 @@ const deployedContracts = {
         {
           inputs: [
             {
+              internalType: "int256",
+              name: "strikePrice",
+              type: "int256",
+            },
+            {
+              internalType: "int256",
+              name: "minStrikePrice",
+              type: "int256",
+            },
+          ],
+          name: "StrikeBelowMinimum",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
               internalType: "uint256",
               name: "remainingShares",
               type: "uint256",
@@ -605,6 +621,11 @@ const deployedContracts = {
               internalType: "uint256",
               name: "payout",
               type: "uint256",
+            },
+            {
+              internalType: "int256",
+              name: "minStrikePrice",
+              type: "int256",
             },
           ],
           name: "buyCover",

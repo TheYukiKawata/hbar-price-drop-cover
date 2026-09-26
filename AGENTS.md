@@ -20,7 +20,7 @@ yarn next:check-types && yarn hardhat:check-types
 yarn next:build
 yarn hardhat:compile
 yarn hardhat:deploy --network hederaTestnet    # deploys, creates the NFT collection, regenerates the ABI file
-yarn hardhat:verify:testnet <address> "<constructor args>"
+yarn hardhat:verify:testnet <address>              # Sourcify; needs only the address
 yarn hardhat:account:generate                  # encrypted deployer key in packages/hardhat/.env
 yarn hardhat:account                           # deployer address and balances
 ```
@@ -68,7 +68,7 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 
 ### Chainlink
 
-- Settlement must use the last round published **before** expiry. `ChainlinkRounds.lastRoundBefore` walks back from the latest round; `verifyLastRoundBefore` proves a round given by the caller, and treats the first round of the next phase as the next round when the given round ends its phase. Never settle with `latestRoundData` at resolution time; a late resolver could pick a later price.
+- Settlement must use the last round published **before** expiry. `ChainlinkRounds.lastRoundBefore` walks back from the latest round; `verifyLastRoundBefore` proves a round given by the caller: the next round in its phase and the first round of the next phase must each be missing or after expiry, and at least one must exist. Never settle with `latestRoundData` at resolution time; a late resolver could pick a later price.
 - A round is fresh only if `updatedAt` is within `maxPriceAge` of the time that matters. Stale at purchase reverts `StalePrice`; stale at expiry voids the policy and refunds the premium.
 - Feed addresses are in the deploy script's `CHAINLINK_HBAR_USD_FEEDS` map. The frontend reads the feed address from the contract (`priceFeed()`), so it follows the deployment.
 
@@ -76,7 +76,7 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 
 - `lockedCapital` must equal the sum of payouts of active policies. Every path that ends a policy (`_settle`) calls `_unlockCapital` exactly once, and `voidUnresolved` is the escape for a broken feed. It accepts any policy still unsettled 30 days after expiry, even one that could still be settled, so keep settlement paths working and keep the delay long.
 - `unclaimedPayouts` is HBAR owed to holders whose payout send failed, and `reservedResolutionFees` is the prepaid fee of every active policy. `totalAssets` excludes both. Never let a failed send revert settlement; `_payHolder` records the amount for `claimPayout` instead.
-- Deposits price shares at `totalAssets`; withdrawals price them at `freeCapital`, as if every open policy pays out. Keep that asymmetry: it stops exits before a loss and deposits that only collect a premium. `withdraw(shares, minAmount)` reverts if the pool moved against the underwriter, and the last underwriter cannot burn every share while capital is locked.
+- Deposits price shares at `totalAssets`; withdrawals price them at `freeCapital`, as if every open policy pays out. Keep that asymmetry: it stops exits before a loss and deposits that only collect a premium. `withdraw(shares, minAmount)` reverts if the pool moved against the underwriter, and while capital is locked every withdrawal must leave at least `MIN_SHARES_BACKING_POLICIES` (10^10) shares in the pool, so someone can claim the capital when policies resolve.
 - Change status before any external call or HBAR transfer. `_settle` sets the status, unlocks, emits, then pays.
 - Share maths uses `VIRTUAL_SHARES` (10^6) and 1 virtual tinybar, rounds in the pool's favour, and rejects deposits that mint zero shares. `sharesToWithdraw(amount)` rounds up so the app can ask for an exact amount.
 
@@ -84,7 +84,7 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 
 - **Cover terms** (strike drop, premium, period, price age, gas, resolution fee): edit `DEFAULT_TERMS` in the deploy script. They are immutable per deployment, so redeploy. The frontend reads them from the contract.
 - **Another feed**, for example ETH/USD: add the feed address to the deploy script map, and update the labels in `components/cover/CoverTerms.tsx` and `HbarUsdPrice.tsx`. The contract does not assume HBAR/USD, but payouts stay in HBAR.
-- **Premium model**: change `quote` in `PriceDropCover.sol`. Keep `buyCover` requiring the exact premium from `quote` plus `resolutionFee`, and update `PriceDropCover.buy.test.ts`.
+- **Premium model**: change `quote` in `PriceDropCover.sol`. Keep `buyCover` requiring the exact premium from `quote` plus `resolutionFee` and checking the buyer's minimum strike, and update `PriceDropCover.buy.test.ts`.
 - **New contract function**: add a test in `packages/hardhat/test/`, deploy, then read it in the frontend through the Scaffold hooks. The ABI types come from `deployedContracts.ts`.
 
 ## Tests

@@ -1,4 +1,4 @@
-import { Address, BaseError, ContractFunctionRevertedError, ExecutionRevertedError, PublicClient } from "viem";
+import { Address, PublicClient } from "viem";
 
 const roundDataOutputs = [
   { name: "roundId", type: "uint80" },
@@ -34,19 +34,12 @@ export const aggregatorAbi = [
 
 const PHASE_ID_SHIFT = 64n;
 const MAX_ROUND_INDEX = (1n << PHASE_ID_SHIFT) - 1n;
+const FIRST_PHASE_ID = 1n;
 
 export class NoRoundBeforeError extends Error {
   constructor(timestamp: bigint) {
     super(`The Chainlink feed has no round before ${timestamp}.`);
   }
-}
-
-function isRevert(error: unknown) {
-  return (
-    error instanceof BaseError &&
-    error.walk(cause => cause instanceof ContractFunctionRevertedError || cause instanceof ExecutionRevertedError) !==
-      null
-  );
 }
 
 function phaseOf(roundId: bigint) {
@@ -59,18 +52,13 @@ function roundInPhase(phaseId: bigint, index: bigint) {
 
 export async function findLastRoundBefore(client: PublicClient, feed: Address, timestamp: bigint): Promise<bigint> {
   const updatedAtOf = async (roundId: bigint) => {
-    try {
-      const [, , , updatedAt] = await client.readContract({
-        address: feed,
-        abi: aggregatorAbi,
-        functionName: "getRoundData",
-        args: [roundId],
-      });
-      return updatedAt;
-    } catch (error) {
-      if (isRevert(error)) return 0n;
-      throw error;
-    }
+    const [, , , updatedAt] = await client.readContract({
+      address: feed,
+      abi: aggregatorAbi,
+      functionName: "getRoundData",
+      args: [roundId],
+    });
+    return updatedAt;
   };
 
   const lastIndexInPhase = async (phaseId: bigint) => {
@@ -109,7 +97,7 @@ export async function findLastRoundBefore(client: PublicClient, feed: Address, t
 
   let lastIndex = latestRoundId - roundInPhase(phaseOf(latestRoundId), 0n);
   let nextPhaseHasRounds = false;
-  for (let phaseId = phaseOf(latestRoundId); phaseId > 0n; phaseId--) {
+  for (let phaseId = phaseOf(latestRoundId); phaseId >= FIRST_PHASE_ID; phaseId--) {
     const firstUpdatedAt = lastIndex > 0n ? await updatedAtOf(roundInPhase(phaseId, 1n)) : 0n;
     if (firstUpdatedAt > 0n && firstUpdatedAt <= timestamp) {
       const index = await lastIndexBefore(phaseId, lastIndex);
@@ -117,6 +105,7 @@ export async function findLastRoundBefore(client: PublicClient, feed: Address, t
       if (!isProvable) break;
       return roundInPhase(phaseId, index);
     }
+    if (phaseId === FIRST_PHASE_ID) break;
     nextPhaseHasRounds = lastIndex > 0n;
     lastIndex = await lastIndexInPhase(phaseId - 1n);
   }

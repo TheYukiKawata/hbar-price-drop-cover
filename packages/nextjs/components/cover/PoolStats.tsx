@@ -6,7 +6,7 @@ export const PoolStats = ({ pool }: { pool: PoolState }) => {
     { label: "Pool assets", value: pool.totalAssets },
     { label: "Backing active policies", value: pool.lockedCapital },
     { label: "Free to underwrite or withdraw", value: pool.freeCapital },
-    { label: "You can withdraw", value: pool.myAssets },
+    { label: "You can withdraw", value: pool.withdrawable },
   ];
 
   return (

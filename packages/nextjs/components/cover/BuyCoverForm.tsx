@@ -46,10 +46,10 @@ export const BuyCoverForm = ({ terms }: { terms: CoverTerms }) => {
     event.preventDefault();
     if (!canBuy) return;
 
-    const [premium] = quote;
+    const [premium, quotedStrike] = quote;
     await writeContractAsync({
       functionName: "buyCover",
-      args: [payout],
+      args: [payout, quotedStrike],
       value: tinybarsToWeibar(premium + terms.resolutionFee),
       gas: BUY_COVER_GAS_LIMIT,
     });

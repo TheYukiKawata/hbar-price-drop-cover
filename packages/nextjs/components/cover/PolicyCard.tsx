@@ -2,10 +2,15 @@
 
 import { useState } from "react";
 import { Address } from "viem";
-import { usePublicClient } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
 import { CoverTerms } from "~~/hooks/cover/useCoverTerms";
 import { useHbarUsdPrice } from "~~/hooks/cover/useHbarUsdPrice";
-import { useScaffoldReadContract, useScaffoldWriteContract, useTargetNetwork } from "~~/hooks/scaffold-hbar";
+import {
+  useDeployedContractInfo,
+  useScaffoldReadContract,
+  useScaffoldWriteContract,
+  useTargetNetwork,
+} from "~~/hooks/scaffold-hbar";
 import { NoRoundBeforeError, findLastRoundBefore } from "~~/utils/cover/chainlink";
 import { formatTinybars } from "~~/utils/cover/hbar";
 import { entityIdFromLongZeroAddress, hashscanUrl } from "~~/utils/cover/hedera";
@@ -23,7 +28,7 @@ type PolicyCardProps = {
 
 export const PolicyCard = ({ policyId, terms }: PolicyCardProps) => {
   const { targetNetwork } = useTargetNetwork();
-  const { price } = useHbarUsdPrice(terms.priceFeed);
+  const { price, error: priceError } = useHbarUsdPrice(terms.priceFeed);
   const { data: policyTuple, isError: isPolicyError } = useScaffoldReadContract({
     contractName: "PriceDropCover",
     functionName: "policies",
@@ -60,7 +65,7 @@ export const PolicyCard = ({ policyId, terms }: PolicyCardProps) => {
         <dd className="m-0 text-right tabular-nums">{formatTinybars(policy.payout)} HBAR</dd>
         <dt className="text-base-content/70">Pays out below</dt>
         <dd className="m-0 text-right tabular-nums">
-          {price ? formatUsdPrice(policy.strikePrice, price.decimals) : "Price feed unavailable"}
+          <StrikePrice strikePrice={policy.strikePrice} decimals={price?.decimals} hasError={priceError !== null} />
         </dd>
         <dt className="text-base-content/70">Expiry</dt>
         <dd className="m-0 text-right">{formatTimestamp(policy.expiry)}</dd>
@@ -136,8 +141,31 @@ const ResolveButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) =
   );
 };
 
+function useOnChainResolveCheck(policyId: bigint) {
+  const publicClient = usePublicClient();
+  const { address } = useAccount();
+  const { data: cover } = useDeployedContractInfo({ contractName: "PriceDropCover" });
+
+  return async function canResolveOnChain() {
+    if (!publicClient || !cover) return false;
+    try {
+      await publicClient.simulateContract({
+        address: cover.address,
+        abi: cover.abi,
+        functionName: "resolve",
+        args: [policyId],
+        account: address,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+}
+
 const VoidButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
   const { searchSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
+  const canResolveOnChain = useOnChainResolveCheck(policyId);
   const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
 
   async function voidIfUnsettleable() {
@@ -145,6 +173,10 @@ const VoidButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
     if (search.kind === "failed") return notification.error(FEED_READ_FAILED);
     if (search.kind === "found") {
       return notification.info("This policy can still be settled with a Chainlink round. Use Resolve now.");
+    }
+    if (await canResolveOnChain()) {
+      notification.info("The contract can still settle this policy, so it will be resolved instead of voided.");
+      return writeContractAsync({ functionName: "resolve", args: [policyId], gas: SETTLEMENT_GAS_LIMIT });
     }
     await writeContractAsync({ functionName: "voidUnresolved", args: [policyId], gas: SETTLEMENT_GAS_LIMIT });
   }
@@ -168,6 +200,20 @@ const ClaimButton = ({ policyId, amount }: { policyId: bigint; amount: bigint })
       {isMining ? "Claiming…" : `Claim ${formatTinybars(amount)} HBAR`}
     </button>
   );
+};
+
+const StrikePrice = ({
+  strikePrice,
+  decimals,
+  hasError,
+}: {
+  strikePrice: bigint;
+  decimals: number | undefined;
+  hasError: boolean;
+}) => {
+  if (decimals !== undefined) return <>{formatUsdPrice(strikePrice, decimals)}</>;
+  if (hasError) return <>Price feed unavailable</>;
+  return <span className="inline-block h-4 w-16 rounded bg-base-300 animate-pulse" aria-label="Loading strike" />;
 };
 
 type StatusLabelProps = {

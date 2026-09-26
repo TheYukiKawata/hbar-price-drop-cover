@@ -7,13 +7,6 @@ import { formatTinybars, parseHbarToTinybars } from "~~/utils/cover/hbar";
 
 type Withdrawal = { shares: bigint; minAmount: bigint };
 
-function maxSharesToWithdraw(pool: PoolState) {
-  if (pool.lockedCapital === 0n) return pool.myShares;
-  const withdrawableFromPool = pool.totalShares - pool.minSharesBackingPolicies;
-  if (withdrawableFromPool <= 0n) return 0n;
-  return pool.myShares < withdrawableFromPool ? pool.myShares : withdrawableFromPool;
-}
-
 type WithdrawalLimit = { maxShares: bigint; available: bigint };
 
 function planWithdrawal(
@@ -38,14 +31,8 @@ export const WithdrawForm = ({ pool }: { pool: PoolState }) => {
     query: { enabled: amount !== undefined && amount > 0n },
   });
 
-  const maxShares = maxSharesToWithdraw(pool);
-  const { data: availableForMaxShares } = useScaffoldReadContract({
-    contractName: "PriceDropCover",
-    functionName: "previewRedeem",
-    args: [maxShares],
-  });
-
-  const available = availableForMaxShares ?? 0n;
+  const maxShares = pool.maxWithdrawShares;
+  const available = pool.withdrawable;
   const withdrawal =
     amount === undefined ? undefined : planWithdrawal({ maxShares, available }, amount, sharesForAmount);
   const canWithdraw =

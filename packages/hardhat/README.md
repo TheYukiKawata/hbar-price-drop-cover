@@ -33,7 +33,7 @@ The tests run on the in-process Hardhat network. `test/coverFixture.ts` installs
 4. Verify the source on Sourcify. HashScan shows Sourcify-verified contracts.
 
    ```bash
-   yarn hardhat:verify:testnet
+   yarn hardhat:verify:testnet <PriceDropCover address>
    ```
 
 ## Configuration
