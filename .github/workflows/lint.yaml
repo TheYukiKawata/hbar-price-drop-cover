@@ -1,4 +1,4 @@
-name: Lint
+name: CI
 
 on:
   push:
@@ -10,33 +10,20 @@ on:
 
 jobs:
   ci:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        node: [lts/*]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Setup node env
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: lts/*
           cache: yarn
 
       - name: Install dependencies
         run: yarn install --immutable
-
-      - name: Run Hardhat node and deploy contracts
-        run: |
-          yarn hardhat:chain &
-          timeout 60s bash -c 'until curl -s -X POST http://127.0.0.1:8545 -H "Content-Type: application/json" --data "{\"jsonrpc\":\"2.0\",\"method\":\"web3_clientVersion\",\"params\":[],\"id\":1}" >/dev/null; do sleep 2; done'
-          yarn hardhat:deploy --network localhost
 
       - name: Run nextjs lint
         run: yarn next:lint --max-warnings=0
@@ -46,3 +33,12 @@ jobs:
 
       - name: Run hardhat lint
         run: yarn hardhat:lint --max-warnings=0
+
+      - name: Check typings on hardhat
+        run: yarn hardhat:check-types
+
+      - name: Run contract tests
+        run: yarn hardhat:test
+
+      - name: Build nextjs
+        run: yarn next:build

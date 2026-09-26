@@ -1,71 +1,58 @@
-# Hardhat package (Hedera)
+# Hardhat package
 
-Hardhat config, contracts, deploy scripts, tests, and Hashscan verification for this monorepo.
+Contracts, tests and the deploy script for HBAR price-drop cover. Run the commands below from the repository root.
 
-## Local development
+## Test
 
-From the repo root, use the explicit `hardhat:*` scripts for this package. Inside `packages/hardhat`, use the unprefixed package-local scripts.
+```bash
+yarn hardhat:test
+```
 
-1. **Start the local chain** (terminal 1, from repo root):
-   ```bash
-   yarn hardhat:chain
-   ```
-   This starts `hardhat node` with **Hedera testnet forking** (`HEDERA_FORKING=true` and `@hashgraph/system-contracts-forking`). JSON-RPC is served at **http://127.0.0.1:8545**.
+The tests run on the in-process Hardhat network. `test/coverFixture.ts` installs mocks of the Hedera Token Service at `0x167` and the Hedera Schedule Service at `0x16b`, and deploys a mock Chainlink aggregator. There is no local node and no testnet fork.
 
-2. **Deploy to the running fork** (terminal 2):
-   ```bash
-   yarn hardhat:deploy --network localhost
-   ```
-   Use **`localhost`** so Hardhat connects to the long-running node on port 8545.
+## Deploy to Hedera testnet
 
-   **`yarn hardhat:deploy` without `--network localhost`** uses the default network `hardhat`, which is the **in-process ephemeral** Hardhat network—**not** the same process as `yarn hardhat:chain`. For deploys against the forked node you started in step 1, always pass **`--network localhost`** while that node is running.
+1. Create a deployer key. It is stored encrypted in `packages/hardhat/.env`.
 
-3. **Run contract tests** (from repo root; tests use `HEDERA_FORKING=true` and can run against the fork or standalone):
-   ```bash
-   yarn hardhat:test
-   ```
-
-## Deploy and verify on Hedera testnet/mainnet
-
-You need a deployer account with HBAR on the target network. Without funds, deploy and verify will fail with "Sender account not found".
-
-1. **Generate or import an account** (from the repo root):
    ```bash
    yarn hardhat:account:generate
    ```
-   or
-   ```bash
-   yarn hardhat:account:import
-   ```
-   The encrypted key is stored in `packages/hardhat/.env`.
 
-2. **Fund the account on testnet:**  
-   Use the [Hedera Portal faucet](https://portal.hedera.com/faucet) to receive testnet HBAR.
+   Or import an existing key with `yarn hardhat:account:import`.
 
-3. **Deploy to Hedera testnet** (from repo root):
+2. Fund the printed address with testnet HBAR from the [Hedera Portal faucet](https://portal.hedera.com/faucet). You need about 20 HBAR. Check the balance with `yarn hardhat:account`.
+
+3. Deploy. You are asked for the key's password.
+
    ```bash
    yarn hardhat:deploy --network hederaTestnet
    ```
-   or
-   ```bash
-   yarn hardhat:deploy --network hedera_testnet
-   ```
-   You will be prompted to enter the password to decrypt your deployer key.
 
-4. **Verify on Hashscan** (uses deployment JSON under `deployments/<network>/`, which includes compiler metadata and sources):
+   The script deploys `PriceDropCover` with the terms in `DEFAULT_TERMS`, calls `createPolicyToken` to create the policy NFT collection, and writes `../nextjs/contracts/deployedContracts.ts`.
+
+4. Verify the source on Sourcify. HashScan shows Sourcify-verified contracts.
+
    ```bash
-   yarn hardhat:verify:testnet   # all contracts on chain 296
-   yarn hardhat:verify:mainnet   # all contracts on chain 295
-   yarn workspace @sh/hardhat verify:contract -- HederaToken testnet
-   yarn workspace @sh/hardhat verify:contract -- HederaToken testnet 0xYourContractAddress
+   yarn hardhat:verify:testnet
    ```
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `HEDERA_TESTNET_RPC_URL` | `https://testnet.hashio.io/api` | JSON-RPC for testnet |
+| `HEDERA_MAINNET_RPC_URL` | `https://mainnet.hashio.io/api` | JSON-RPC for mainnet |
+| `COVER_PERIOD_SECONDS` | `604800` | Cover length for a new deployment |
+| `POLICY_TOKEN_CREATION_FEE_HBAR` | `15` | HBAR sent to create the NFT collection |
 
 ## Layout
 
-- `contracts/` — Solidity sources
-- `deploy/` — hardhat-deploy scripts (e.g. `00_deploy_hedera_token.ts`)
-- `scripts/` — generateAccount, importAccount, verifyHedera.js, etc.
-- `test/` — contract tests
-- `hardhat.config.ts` — networks (`hardhat`, `localhost` for RPC at 127.0.0.1:8545, `hederaTestnet`, `hederaMainnet`)
-
-Network and RPC URLs are in `hardhat.config.ts`. Deployer key is read from `.env` (encrypted) and decrypted at deploy time for live networks.
+| Path | Contents |
+| --- | --- |
+| `contracts/` | `PriceDropCover`, `UnderwriterPool` |
+| `contracts/chainlink/` | Feed interface and `ChainlinkRounds` |
+| `contracts/hedera/` | HTS and HSS interfaces and addresses |
+| `contracts/test/` | Mocks, used only by tests |
+| `deploy/` | hardhat-deploy script with feed addresses and cover terms |
+| `test/` | Unit tests |
+| `hardhat.config.ts` | Compiler (Solidity 0.8.28, Cancun), networks, Sourcify |

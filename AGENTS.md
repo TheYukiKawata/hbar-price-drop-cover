@@ -1,138 +1,114 @@
 # Agent instructions
 
-Briefing for coding agents in this app (Cursor, Claude Code, Codex). Claude Code loads it through `CLAUDE.md`.
+Briefing for coding agents (Claude Code, Cursor, Codex) working in an app made from the **HBAR price-drop cover** template. Claude Code loads it through `CLAUDE.md`. Read `README.md` for the product; this file covers what you need to change the code safely.
 
-This is a Scaffold-HBAR dApp: Next.js App Router, wallet connect, Debug Contracts, and Hedera networks (testnet, mainnet, local fork). The CLI may have left only Hardhat or only Foundry.
+The app sells parametric cover against an HBAR/USD price drop on Hedera testnet. Three Hedera and ecosystem pieces carry the logic, and each one breaks the product if you remove it:
 
-Use the package manager this project was created with (`packageManager` in the root `package.json`, or the lockfile). Examples use `yarn`; if the app was created with npm, swap `yarn <script>` for `npm run <script>`.
+- **Chainlink HBAR/USD feed**: sets the strike at purchase and decides the outcome at expiry.
+- **Hedera Schedule Service** (system contract `0x16b`, HIP-1215): the contract schedules its own `resolve(policyId)` call at expiry.
+- **Hedera Token Service** (system contract `0x167`): each policy is a serial of an NFT collection the contract owns.
 
-## Which Solidity package
-
-- `packages/hardhat` exists → Hardhat (`hardhat-deploy`)
-- `packages/foundry` exists → Foundry (Forge scripts)
-- `packages/nextjs` is always the frontend (App Router, RainbowKit, Wagmi, Viem, DaisyUI)
-
-Follow only the flavor that is present.
+Use the package manager the project was created with (`packageManager` in the root `package.json`, or the lockfile). Examples use `yarn`. With npm, run `npm run <script>` instead.
 
 ## Commands
 
-Package-prefixed scripts for package-specific work. Keep only truly cross-workspace commands unprefixed.
-
 ```bash
-# Local chain + deploy + frontend (separate terminals)
-yarn hardhat:chain    # Hedera-forked Hardhat node on 8545
-yarn hardhat:deploy --network localhost
-yarn foundry:chain    # Anvil from the Foundry package
-yarn foundry:deploy
-yarn next:start       # http://localhost:3000
-
-# Frontend only
-yarn next:dev
-
-# Quality / build
-yarn lint
-yarn format
+yarn start                                     # Next.js dev server on http://localhost:3000, reads testnet
+yarn test                                      # Hardhat unit tests with system contract mocks
+yarn lint                                      # Next.js and Hardhat ESLint
+yarn next:check-types && yarn hardhat:check-types
 yarn next:build
 yarn hardhat:compile
-yarn foundry:compile
-
-# Live networks
-yarn hardhat:deploy --network hederaTestnet   # or hederaMainnet
-yarn foundry:deploy --network hedera_testnet  # or hedera_mainnet
-yarn hardhat:verify:testnet
-yarn foundry:verify:testnet
-
-# Deployer account
-yarn hardhat:account:generate
-yarn hardhat:account:import
-yarn hardhat:account
+yarn hardhat:deploy --network hederaTestnet    # deploys, creates the NFT collection, regenerates the ABI file
+yarn hardhat:verify:testnet <address> "<constructor args>"
+yarn hardhat:account:generate                  # encrypted deployer key in packages/hardhat/.env
+yarn hardhat:account                           # deployer address and balances
 ```
 
-`yarn hardhat:deploy` without `--network localhost` targets the in-process `hardhat` network, not the long-running fork.
+There is no local chain and no fork. Hedera's system contracts cannot be emulated well enough to mint NFTs or schedule calls, so the tests use mocks and the app talks to testnet. Do not add `hardhat node` or `@hashgraph/system-contracts-forking` back.
+
+Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you call a change done.
 
 ## Layout
 
-### Hardhat
+| Path | Contents |
+| --- | --- |
+| `packages/hardhat/contracts/PriceDropCover.sol` | Policies: quote, buy, schedule, resolve, pay |
+| `packages/hardhat/contracts/UnderwriterPool.sol` | Abstract pool: shares, deposits, withdrawals, locked capital |
+| `packages/hardhat/contracts/chainlink/` | `AggregatorV3Interface`, `ChainlinkRounds` library (round lookup and proof) |
+| `packages/hardhat/contracts/hedera/` | HTS and HSS interfaces, their addresses, `HEDERA_SUCCESS` |
+| `packages/hardhat/contracts/test/` | Mocks of HTS, HSS, the policy NFT, and a Chainlink aggregator. Tests only |
+| `packages/hardhat/deploy/00_deploy_price_drop_cover.ts` | Feed address per network, cover terms, collection creation |
+| `packages/hardhat/test/coverFixture.ts` | Installs the mocks at `0x167` and `0x16b`, funds the pool, buys cover |
+| `packages/nextjs/app/page.tsx` | Cover page |
+| `packages/nextjs/app/pool/page.tsx` | Pool page |
+| `packages/nextjs/components/cover/` | Forms, policy list and card, pool stats |
+| `packages/nextjs/hooks/cover/` | Reads of terms, pool, feed price, owned policies, token association |
+| `packages/nextjs/utils/cover/` | HBAR units, formatting, mirror node client, policy tuple parsing |
+| `packages/nextjs/contracts/deployedContracts.ts` | Generated by the deploy. Never edit it by hand |
 
-- Contracts: `packages/hardhat/contracts/`
-- Deploy scripts: `packages/hardhat/deploy/`
-- Tests: `packages/hardhat/test/`
-- Config: `packages/hardhat/hardhat.config.ts`
-- Tagged deploy: if `deployHederaToken.tags = ["HederaToken"]`, run `yarn hardhat:deploy --tags HederaToken`
+## Rules that are easy to break
 
-### Foundry
+### HBAR units
 
-- Contracts: `packages/foundry/contracts/`
-- Deploy scripts: `packages/foundry/script/` (`Deploy.s.sol`, `DeployHederaToken.s.sol`, `DeployHtsTokenCreator.s.sol`)
-- Tests: `packages/foundry/test/`
-- Config: `packages/foundry/foundry.toml`
-- One contract: `yarn foundry:deploy --file DeployHederaToken.s.sol`
+- Inside the EVM, `msg.value`, `address.balance` and every amount in the contracts are **tinybars** (8 decimals).
+- JSON-RPC and wallets send `value` in **weibar** (18 decimals). Hedera divides by 10^10 on the way in.
+- In the frontend, keep amounts in tinybars as `bigint`. Convert with `tinybarsToWeibar` from `utils/cover/hbar.ts` only when you set a transaction's `value`. Parse user input with `parseHbarToTinybars`, display with `formatTinybars`. Never use `parseEther` or `formatEther` on contract amounts.
+- In Hardhat tests the mocks run on a normal EVM, so `parseEther` amounts are fine there.
 
-### After deploy
+### Hedera system contracts
 
-ABIs and addresses are written to `packages/nextjs/contracts/deployedContracts.ts`. Put third-party contracts in `packages/nextjs/contracts/externalContracts.ts`.
+- HTS and HSS return a response code. Success is `22` (`HEDERA_SUCCESS`). Revert with `HederaCallFailed(op, code)` on anything else; do not ignore codes.
+- `184` is `TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`. A buyer must associate the policy collection, unless the account has free automatic association slots. The frontend checks the mirror node and calls HIP-719 `associate()` on the token address.
+- The contract is the collection's treasury and supply key. Minting goes to the treasury, then `transferNFT` moves the serial to the buyer.
+- `createNonFungibleToken` needs HBAR for the fee (about 1 USD). Send it as `value`; the deploy script sends `POLICY_TOKEN_CREATION_FEE_HBAR`.
+- `scheduleCall` fails when the chosen second is full. `buyCover` asks `hasScheduleCapacity` and tries up to 30 seconds after expiry. Keep that check if you change scheduling.
+- The contract's own balance pays for scheduled transactions. The pool's `totalAssets` is the contract balance, so these fees come out of the pool.
+- Hedera charges at least 80% of the gas limit. Set gas limits close to real use. The frontend constants are `BUY_COVER_GAS_LIMIT` in `BuyCoverForm.tsx` and `RESOLVE_GAS_LIMIT` in `PolicyCard.tsx`; the scheduled call uses the `resolutionGasLimit` term.
 
-Sample contracts on this starter: `HederaToken` (ERC-20) and `HtsTokenCreator` (HTS precompile at `0x167`).
+### Chainlink
 
-## Frontend contract interaction
+- Settlement must use the last round published **before** expiry. `ChainlinkRounds.lastRoundBefore` walks back from the latest round; `verifyLastRoundBefore` proves a round given by the caller. Never settle with `latestRoundData` at resolution time; a late resolver could pick a later price.
+- A round is fresh only if `updatedAt` is within `maxPriceAge` of the time that matters. Stale at purchase reverts `StalePrice`; stale at expiry voids the policy and refunds the premium.
+- Feed addresses are in the deploy script's `CHAINLINK_HBAR_USD_FEEDS` map. The frontend reads the feed address from the contract (`priceFeed()`), so it follows the deployment.
 
-Hooks live in `packages/nextjs/hooks/scaffold-hbar`. Use the names that exist in the codebase:
+### Pool accounting
 
-- `useScaffoldReadContract` — not `useScaffoldContractRead`
-- `useScaffoldWriteContract` — not `useScaffoldContractWrite`
+- `lockedCapital` must equal the sum of payouts of active policies. Every path that ends a policy calls `_unlockCapital` exactly once.
+- Change status before any external call or HBAR transfer. `resolve` sets the status, unlocks, emits, then pays.
+- Share maths uses a virtual offset of 1 share and 1 tinybar to stop first-depositor inflation. Keep `Math.mulDiv` rounding in the pool's favour.
 
-Also: `useScaffoldWatchContractEvent`, `useScaffoldEventHistory`, `useDeployedContractInfo`, `useScaffoldContract`, `useTransactor`.
+## Changing the product
 
-```typescript
-const { data: balance } = useScaffoldReadContract({
-  contractName: "HederaToken",
-  functionName: "balanceOf",
-  args: [connectedAddress],
-});
+- **Cover terms** (strike drop, premium, period, price age, gas): edit `DEFAULT_TERMS` in the deploy script. They are immutable per deployment, so redeploy. The frontend reads them from the contract.
+- **Another feed**, for example ETH/USD: add the feed address to the deploy script map, and update the labels in `components/cover/CoverTerms.tsx` and `HbarUsdPrice.tsx`. The contract does not assume HBAR/USD, but payouts stay in HBAR.
+- **Premium model**: change `quote` in `PriceDropCover.sol`. Keep `buyCover` requiring the exact premium from `quote`, and update `PriceDropCover.buy.test.ts`.
+- **New contract function**: add a test in `packages/hardhat/test/`, deploy, then read it in the frontend through the Scaffold hooks. The ABI types come from `deployedContracts.ts`.
 
-const { writeContractAsync, isPending } = useScaffoldWriteContract({
-  contractName: "HederaToken",
-});
+## Tests
 
-await writeContractAsync({
-  functionName: "mint",
-  args: [connectedAddress, parseEther("1")],
-});
-```
+- `coverFixture.ts` writes mock bytecode to `0x167` and `0x16b` with `hardhat_setCode`. The mock HTS charges a 10 HBAR creation fee and returns 184 for unassociated receivers, like Hedera.
+- Execute a scheduled call with `MockHederaScheduleService.execute(index)`. Fill a second with `markSecondFull(second)`.
+- Publish prices with `MockAggregator.pushRound(answer, updatedAt)`. Answers have 8 decimals, like the testnet feed.
+- Use `time.increaseTo` from `@nomicfoundation/hardhat-network-helpers` to reach expiry.
 
-`HederaToken.mint` is `onlyOwner`. For HTS creation, `HtsTokenCreator.createToken` is payable (HTS fee via `msg.value`) and emits `TokenCreated`.
+## Frontend
 
-### UI
+Scaffold hooks live in `packages/nextjs/hooks/scaffold-hbar`. Use `useScaffoldReadContract`, `useScaffoldWriteContract`, `useScaffoldEventHistory`, `useDeployedContractInfo` and `useTransactor`, with `contractName: "PriceDropCover"`.
 
-Use `@scaffold-hbar-ui/components` for web3 UI: `Address`, `AddressInput`, `Balance`, `EtherInput`, `IntegerInput`.
+Components under `components/cover/` get the contract's terms through `WithCoverTerms`, which also renders the "not deployed" and "no policy collection" states. Use it on new pages that need the terms.
 
-Use DaisyUI classes, not raw Tailwind when a DaisyUI component exists:
+Mirror node reads go through `utils/cover/mirrorNode.ts`, which checks the response shape before use. Add new endpoints there, with a shape check, not inline `fetch` calls.
 
-```tsx
-<button className="btn btn-primary">Connect</button>
-```
-
-### Networks
-
-- Hardhat: `packages/hardhat/hardhat.config.ts` (`hederaTestnet` 296, `hederaMainnet` 295)
-- Foundry: `packages/foundry/foundry.toml` (`hedera_testnet`, `hedera_mainnet`)
-- Next.js: `packages/nextjs/scaffold.config.ts` (target networks, polling, RPC overrides, WalletConnect)
+Use DaisyUI classes where a DaisyUI component exists. Imports use the `~~` alias. App Router pages that use hooks need `"use client"`.
 
 ## Style
 
 | Style | Use |
 | --- | --- |
-| `UpperCamelCase` | types, components |
+| `UpperCamelCase` | types, components, Solidity contracts and errors |
 | `lowerCamelCase` | variables, functions |
 | `CONSTANT_CASE` | constants |
-| `snake_case` | Hardhat deploy files and Foundry scripts |
+| `snake_case` | deploy script file names |
 
-Next.js imports use the `~~` alias:
-
-```tsx
-import { useTargetNetwork } from "~~/hooks/scaffold-hbar";
-```
-
-App Router pages live under `packages/nextjs/app/`. Add `"use client"` when the page uses hooks.
-
-Prefer `type` over `interface`. No `T` prefix on types. Let TypeScript infer when it can. Comments should add information.
+Prefer `type` over `interface` in TypeScript. Solidity reverts use custom errors, not strings.
