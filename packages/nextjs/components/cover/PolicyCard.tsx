@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Address, BaseError, ContractFunctionRevertedError, ExecutionRevertedError } from "viem";
+import { Address, BaseError, ContractFunctionRevertedError } from "viem";
 import { useAccount, usePublicClient } from "wagmi";
 import { CoverTerms } from "~~/hooks/cover/useCoverTerms";
 import { useHbarUsdPrice } from "~~/hooks/cover/useHbarUsdPrice";
@@ -125,7 +125,7 @@ const ResolveButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) =
   async function resolveWithContractSearch() {
     const check = await checkOnChainResolve();
     if (check === "failed") return notification.error(FEED_READ_FAILED);
-    if (check === "reverts") {
+    if (check === "noRound") {
       return notification.error("The Chainlink feed has no round that can settle this policy.");
     }
     await writeContractAsync({ functionName: "resolve", args: [policyId], gas: SETTLEMENT_GAS_LIMIT });
@@ -149,14 +149,12 @@ const ResolveButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) =
   );
 };
 
-type OnChainResolveCheck = "succeeds" | "reverts" | "failed";
+type OnChainResolveCheck = "succeeds" | "noRound" | "failed";
 
-function isContractRevert(error: unknown) {
+function isNoRoundFoundRevert(error: unknown) {
   if (!(error instanceof BaseError)) return false;
-  const revert = error.walk(
-    cause => cause instanceof ContractFunctionRevertedError || cause instanceof ExecutionRevertedError,
-  );
-  return revert !== null;
+  const revert = error.walk(cause => cause instanceof ContractFunctionRevertedError);
+  return revert instanceof ContractFunctionRevertedError && revert.data?.errorName === "NoRoundFoundBefore";
 }
 
 function useOnChainResolveCheck(policyId: bigint) {
@@ -176,7 +174,7 @@ function useOnChainResolveCheck(policyId: bigint) {
       });
       return "succeeds";
     } catch (error) {
-      return isContractRevert(error) ? "reverts" : "failed";
+      return isNoRoundFoundRevert(error) ? "noRound" : "failed";
     }
   };
 }
