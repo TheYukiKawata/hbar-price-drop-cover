@@ -27,7 +27,7 @@ library ChainlinkRounds {
         uint256 maxLookback
     ) internal view returns (Round memory round) {
         round = latest(feed);
-        for (uint256 stepsBack = 0; round.updatedAt > timestamp; stepsBack++) {
+        for (uint256 stepsBack = 0; round.updatedAt == 0 || round.updatedAt > timestamp; stepsBack++) {
             if (stepsBack == maxLookback || _isFirstInPhase(round.id)) revert NoRoundFoundBefore(timestamp);
             round = _round(feed, round.id - 1);
         }
@@ -51,9 +51,14 @@ library ChainlinkRounds {
         uint256 timestamp
     ) private view returns (bool) {
         if (latest(feed).id == roundId) return true;
-        uint256 nextUpdatedAt = _updatedAtOrZero(feed, roundId + 1);
-        if (nextUpdatedAt == 0) nextUpdatedAt = _updatedAtOrZero(feed, _firstRoundOfNextPhase(roundId));
-        return nextUpdatedAt > timestamp;
+        uint256 nextInPhaseUpdatedAt = _updatedAtOrZero(feed, roundId + 1);
+        uint256 nextPhaseUpdatedAt = _updatedAtOrZero(feed, _firstRoundOfNextPhase(roundId));
+        if (nextInPhaseUpdatedAt == 0 && nextPhaseUpdatedAt == 0) return false;
+        return _isMissingOrAfter(nextInPhaseUpdatedAt, timestamp) && _isMissingOrAfter(nextPhaseUpdatedAt, timestamp);
+    }
+
+    function _isMissingOrAfter(uint256 updatedAt, uint256 timestamp) private pure returns (bool) {
+        return updatedAt == 0 || updatedAt > timestamp;
     }
 
     function _updatedAtOrZero(AggregatorV3Interface feed, uint80 roundId) private view returns (uint256) {

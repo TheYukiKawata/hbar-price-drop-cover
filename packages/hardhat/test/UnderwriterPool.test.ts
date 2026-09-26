@@ -81,14 +81,16 @@ describe("UnderwriterPool", function () {
     await expect(cover.connect(underwriter).withdraw(1n, 0n)).to.be.revertedWithCustomError(cover, "ZeroAmount");
   });
 
-  it("keeps the last shares in the pool while they back policies", async function () {
+  it("keeps enough shares in the pool to claim capital that backs policies", async function () {
     const { cover, underwriter, buyer } = await loadFundedCover();
     await buyCover(cover, buyer);
     const shares = await cover.sharesOf(underwriter.address);
+    const minShares = await cover.MIN_SHARES_BACKING_POLICIES();
 
-    await expect(cover.connect(underwriter).withdraw(shares, 0n))
-      .to.be.revertedWithCustomError(cover, "LastSharesBackPolicies")
-      .withArgs(PAYOUT);
+    await expect(cover.connect(underwriter).withdraw(shares - minShares + 1n, 0n))
+      .to.be.revertedWithCustomError(cover, "TooFewSharesBackPolicies")
+      .withArgs(minShares - 1n, minShares);
+    await expect(cover.connect(underwriter).withdraw(shares - minShares, 0n)).to.not.be.reverted;
   });
 
   it("rejects a withdrawal that pays less than the minimum", async function () {

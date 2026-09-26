@@ -172,6 +172,21 @@ describe("PriceDropCover: resolving with a round proof", function () {
     await expect(cover.resolveWithRound(policyId, lastRoundOfOldPhase)).to.changeEtherBalance(buyer, PAYOUT);
   });
 
+  it("rejects the last round of a phase when the next phase started before expiry", async function () {
+    const { cover, buyer, priceFeed } = await loadFundedCover();
+    const { policyId } = await buyCover(cover, buyer);
+    const expiry = await expiryOf(cover, policyId);
+    const lastRoundOfOldPhase = await pushRoundAt(priceFeed, CRASHED_PRICE, expiry - 600n);
+    await priceFeed.startNextPhase();
+    await pushRoundAt(priceFeed, RISEN_PRICE, expiry - 60n);
+    await time.increaseTo(expiry + 900n);
+    await pushRoundAt(priceFeed, RISEN_PRICE, expiry + 600n);
+
+    await expect(cover.resolveWithRound(policyId, lastRoundOfOldPhase))
+      .to.be.revertedWithCustomError(cover, "RoundNotLastBefore")
+      .withArgs(lastRoundOfOldPhase, expiry);
+  });
+
   it("rejects an earlier round", async function () {
     const { cover, policyId, expiry, roundBeforeExpiry } = await policyWithRoundsAroundExpiry();
 

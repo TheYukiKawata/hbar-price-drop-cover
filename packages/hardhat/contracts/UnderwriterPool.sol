@@ -5,6 +5,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 abstract contract UnderwriterPool {
     uint256 public constant VIRTUAL_SHARES = 1e6;
+    uint256 public constant MIN_SHARES_BACKING_POLICIES = VIRTUAL_SHARES * 1e4;
 
     uint256 public totalShares;
     uint256 public lockedCapital;
@@ -20,7 +21,7 @@ abstract contract UnderwriterPool {
     error InsufficientShares(uint256 requested, uint256 owned);
     error InsufficientFreeCapital(uint256 requested, uint256 available);
     error WithdrawalBelowMinimum(uint256 amount, uint256 minAmount);
-    error LastSharesBackPolicies(uint256 lockedCapital);
+    error TooFewSharesBackPolicies(uint256 remainingShares, uint256 minShares);
     error HbarTransferFailed(address recipient, uint256 amount);
 
     function deposit() external payable returns (uint256 shares) {
@@ -37,7 +38,7 @@ abstract contract UnderwriterPool {
         if (shares == 0) revert ZeroAmount();
         uint256 owned = sharesOf[msg.sender];
         if (shares > owned) revert InsufficientShares(shares, owned);
-        if (shares == totalShares && lockedCapital > 0) revert LastSharesBackPolicies(lockedCapital);
+        _requireSharesBackingPolicies(totalShares - shares);
         amount = previewRedeem(shares);
         if (amount == 0) revert ZeroAmount();
         if (amount < minAmount) revert WithdrawalBelowMinimum(amount, minAmount);
@@ -100,6 +101,11 @@ abstract contract UnderwriterPool {
 
     function _saturatingSub(uint256 minuend, uint256 subtrahend) private pure returns (uint256) {
         return minuend > subtrahend ? minuend - subtrahend : 0;
+    }
+
+    function _requireSharesBackingPolicies(uint256 remainingShares) private view {
+        if (lockedCapital == 0 || remainingShares >= MIN_SHARES_BACKING_POLICIES) return;
+        revert TooFewSharesBackPolicies(remainingShares, MIN_SHARES_BACKING_POLICIES);
     }
 
     function _requireFreeCapital(uint256 amount) private view {
