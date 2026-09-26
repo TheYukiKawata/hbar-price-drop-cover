@@ -6,7 +6,7 @@
     "account:generate": "hardhat run scripts/generateAccount.ts",
     "account:import": "hardhat run scripts/importAccount.ts",
     "account:reveal-pk": "hardhat run scripts/revealPK.ts",
-    "check-types": "tsc --noEmit --incremental",
+    "check-types": "hardhat typechain && tsc --noEmit --incremental",
     "compile": "hardhat compile",
     "clean": "hardhat clean",
     "deploy": "ts-node scripts/runHardhatDeployWithPK.ts",
