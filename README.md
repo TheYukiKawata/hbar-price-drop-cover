@@ -3,7 +3,7 @@
 A Scaffold-HBAR template for parametric cover on Hedera. A buyer pays a premium and receives a policy NFT. If the Chainlink HBAR/USD price at expiry is below the policy's strike, the contract pays the NFT holder. Nobody files a claim and nobody runs a keeper: the contract schedules its own settlement with the Hedera Schedule Service when the policy is sold.
 
 ```bash
-npm create scaffold-hbar@latest -- --template yuki-kawata/hbar-price-drop-cover
+npm create scaffold-hbar@latest -- --template TheYukiKawata/hbar-price-drop-cover
 ```
 
 The scaffolded app points at a contract that is already live on Hedera testnet, so you can buy cover and fund the pool before you deploy anything.
