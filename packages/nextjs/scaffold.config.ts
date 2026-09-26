@@ -1,3 +1,5 @@
+import type { ChainEstimateFeesPerGasFnParameters } from "viem";
+import { getGasPrice } from "viem/actions";
 import * as chains from "viem/chains";
 
 export type ScaffoldConfig = {
@@ -8,7 +10,20 @@ export type ScaffoldConfig = {
   walletConnectProjectId: string;
 };
 
-const targetNetworks = [chains.hederaTestnet] as const satisfies readonly [chains.Chain, ...chains.Chain[]];
+const withRelayGasPrice = <chain extends chains.Chain>(chain: chain) => ({
+  ...chain,
+  fees: {
+    estimateFeesPerGas: async ({ client, type }: ChainEstimateFeesPerGasFnParameters) => {
+      const gasPrice = await getGasPrice(client);
+      return type === "legacy" ? { gasPrice } : { maxFeePerGas: gasPrice, maxPriorityFeePerGas: 0n };
+    },
+  },
+});
+
+const targetNetworks = [withRelayGasPrice(chains.hederaTestnet)] as const satisfies readonly [
+  chains.Chain,
+  ...chains.Chain[],
+];
 
 const scaffoldConfig = {
   targetNetworks,
