@@ -97,30 +97,40 @@ type SettlementRoundSearch = { kind: "found"; roundId: bigint } | { kind: "none"
 
 function useSettlementRound({ expiry, priceFeed }: Omit<SettlementButtonProps, "policyId">) {
   const publicClient = usePublicClient();
-  const [isSearching, setIsSearching] = useState(false);
 
-  async function searchSettlementRound(): Promise<SettlementRoundSearch> {
+  return async function searchSettlementRound(): Promise<SettlementRoundSearch> {
     if (!publicClient) return { kind: "failed" };
-    setIsSearching(true);
     try {
       return { kind: "found", roundId: await findLastRoundBefore(publicClient, priceFeed, expiry) };
     } catch (error) {
       if (error instanceof NoRoundBeforeError) return { kind: "none" };
       return { kind: "failed" };
+    }
+  };
+}
+
+function useBusyWhile() {
+  const [isBusy, setIsBusy] = useState(false);
+
+  async function busyWhile(task: () => Promise<unknown>) {
+    setIsBusy(true);
+    try {
+      await task();
     } finally {
-      setIsSearching(false);
+      setIsBusy(false);
     }
   }
 
-  return { searchSettlementRound, isSearching };
+  return { isBusy, busyWhile };
 }
 
 const FEED_READ_FAILED = "Could not read the Chainlink feed. Try again.";
 
 const ResolveButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
-  const { searchSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
+  const searchSettlementRound = useSettlementRound({ expiry, priceFeed });
   const checkOnChainResolve = useOnChainResolveCheck(policyId);
-  const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
+  const { writeContractAsync } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
+  const { isBusy, busyWhile } = useBusyWhile();
 
   async function resolveWithContractSearch() {
     const check = await checkOnChainResolve();
@@ -143,8 +153,8 @@ const ResolveButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) =
   }
 
   return (
-    <button className="btn btn-sm btn-outline" disabled={isSearching || isMining} onClick={resolveWithSettlementRound}>
-      {isSearching || isMining ? "Resolving…" : "Resolve now"}
+    <button className="btn btn-sm btn-outline" disabled={isBusy} onClick={() => busyWhile(resolveWithSettlementRound)}>
+      {isBusy ? "Resolving…" : "Resolve now"}
     </button>
   );
 };
@@ -180,9 +190,10 @@ function useOnChainResolveCheck(policyId: bigint) {
 }
 
 const VoidButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
-  const { searchSettlementRound, isSearching } = useSettlementRound({ expiry, priceFeed });
+  const searchSettlementRound = useSettlementRound({ expiry, priceFeed });
   const checkOnChainResolve = useOnChainResolveCheck(policyId);
-  const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
+  const { writeContractAsync } = useScaffoldWriteContract({ contractName: "PriceDropCover" });
+  const { isBusy, busyWhile } = useBusyWhile();
 
   async function voidIfUnsettleable() {
     const search = await searchSettlementRound();
@@ -200,8 +211,8 @@ const VoidButton = ({ policyId, expiry, priceFeed }: SettlementButtonProps) => {
   }
 
   return (
-    <button className="btn btn-sm btn-ghost" disabled={isSearching || isMining} onClick={voidIfUnsettleable}>
-      {isSearching || isMining ? "Checking…" : "Void and refund the premium"}
+    <button className="btn btn-sm btn-ghost" disabled={isBusy} onClick={() => busyWhile(voidIfUnsettleable)}>
+      {isBusy ? "Checking…" : "Void and refund the premium"}
     </button>
   );
 };
