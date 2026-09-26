@@ -116,6 +116,19 @@ describe("PriceDropCover: resolving cover", function () {
     await expect(cover.resolve(42n)).to.be.revertedWithCustomError(cover, "PolicyNotActive").withArgs(42n);
   });
 
+  it("walks past rounds with no data", async function () {
+    const { cover, buyer, priceFeed } = await loadFundedCover();
+    const { policyId } = await buyCover(cover, buyer);
+    const expiry = await expiryOf(cover, policyId);
+    const roundAtExpiry = await pushRoundAt(priceFeed, CRASHED_PRICE, expiry - 60n);
+    await time.increaseTo(expiry);
+    await priceFeed.pushEmptyRound();
+
+    await expect(cover.resolve(policyId))
+      .to.emit(cover, "PolicyResolved")
+      .withArgs(policyId, PolicyStatus.PaidOut, roundAtExpiry, CRASHED_PRICE, buyer.address, PAYOUT);
+  });
+
   it("voids the policy when the price at expiry is not positive", async function () {
     const { cover, buyer, priceFeed } = await loadFundedCover();
     const { policyId, premium } = await buyCover(cover, buyer);

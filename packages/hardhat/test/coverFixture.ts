@@ -76,8 +76,9 @@ export function loadFundedCover() {
 }
 
 export async function buyCover(cover: PriceDropCover, buyer: HardhatEthersSigner, payout = PAYOUT) {
-  const [premium] = await cover.quote(payout);
-  const receipt = await (await cover.connect(buyer).buyCover(payout, { value: premium + RESOLUTION_FEE })).wait();
+  const [premium, strikePrice] = await cover.quote(payout);
+  const purchase = await cover.connect(buyer).buyCover(payout, strikePrice, { value: premium + RESOLUTION_FEE });
+  const receipt = await purchase.wait();
   const coverBought = receipt!.logs
     .map(log => cover.interface.parseLog(log))
     .find(parsed => parsed?.name === "CoverBought");

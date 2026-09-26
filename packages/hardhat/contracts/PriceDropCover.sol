@@ -86,6 +86,7 @@ contract PriceDropCover is UnderwriterPool {
     error StalePrice(uint256 updatedAt);
     error InvalidPrice(int256 answer);
     error WrongPayment(uint256 expected, uint256 received);
+    error StrikeBelowMinimum(int256 strikePrice, int256 minStrikePrice);
     error NoScheduleCapacity(uint256 expiry);
     error PolicyNotActive(uint256 policyId);
     error CoverNotExpired(uint256 policyId, uint256 expiry);
@@ -129,13 +130,14 @@ contract PriceDropCover is UnderwriterPool {
         strikePrice = (_freshPrice() * int256(BPS - triggerDropBps)) / int256(BPS);
     }
 
-    function buyCover(uint256 payout) external payable returns (uint256 policyId) {
+    function buyCover(uint256 payout, int256 minStrikePrice) external payable returns (uint256 policyId) {
         if (policyToken == address(0)) revert PolicyTokenNotCreated();
         if (payout == 0) revert ZeroAmount();
 
         (uint256 premium, int256 strikePrice) = quote(payout);
         uint256 price = premium + resolutionFee;
         if (msg.value != price) revert WrongPayment(price, msg.value);
+        if (strikePrice < minStrikePrice) revert StrikeBelowMinimum(strikePrice, minStrikePrice);
         _reserveResolutionFee(resolutionFee);
         _lockCapital(payout);
 
