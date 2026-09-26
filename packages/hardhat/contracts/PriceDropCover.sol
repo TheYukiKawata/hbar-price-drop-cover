@@ -41,7 +41,7 @@ contract PriceDropCover is UnderwriterPool {
     uint256 private constant MAX_ROUND_LOOKBACK = 24;
     uint256 private constant MAX_SCHEDULE_DELAY = 30;
     uint256 private constant PAYOUT_GAS_LIMIT = 50_000;
-    uint256 public constant UNRESOLVED_VOID_DELAY = 7 days;
+    uint256 public constant UNRESOLVED_VOID_DELAY = 30 days;
     uint256 private constant SUPPLY_KEY = 16;
     int64 private constant POLICY_TOKEN_AUTO_RENEW_PERIOD = 7_776_000;
     bytes private constant POLICY_METADATA = "HBAR price-drop cover";
@@ -136,6 +136,7 @@ contract PriceDropCover is UnderwriterPool {
         (uint256 premium, int256 strikePrice) = quote(payout);
         uint256 price = premium + resolutionFee;
         if (msg.value != price) revert WrongPayment(price, msg.value);
+        _reserveResolutionFee(resolutionFee);
         _lockCapital(payout);
 
         uint256 expiry = block.timestamp + coverPeriod;
@@ -197,6 +198,7 @@ contract PriceDropCover is UnderwriterPool {
         address holder = IERC721(policyToken).ownerOf(policyId);
         policy.status = outcome;
         _unlockCapital(policy.payout);
+        _releaseResolutionFee(resolutionFee);
         emit PolicyResolved(policyId, outcome, round.id, round.answer, holder, amountPaid);
 
         if (amountPaid > 0) _payHolder(policyId, holder, amountPaid);

@@ -2,7 +2,15 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { MockAggregator, MockPolicyNft, PolicyHolderWallet, PriceDropCover } from "../typechain-types";
-import { buyCover, loadFundedCover, MAX_PRICE_AGE, OPENING_PRICE, PAYOUT, PolicyStatus } from "./coverFixture";
+import {
+  buyCover,
+  loadFundedCover,
+  MAX_PRICE_AGE,
+  OPENING_PRICE,
+  PAYOUT,
+  PolicyStatus,
+  RESOLUTION_FEE,
+} from "./coverFixture";
 
 const CRASHED_PRICE = ethers.parseUnits("0.05", 8);
 const RISEN_PRICE = ethers.parseUnits("0.12", 8);
@@ -151,6 +159,19 @@ describe("PriceDropCover: resolving with a round proof", function () {
     await expect(cover.resolveWithRound(policyId, roundAtExpiry)).to.changeEtherBalance(buyer, PAYOUT);
   });
 
+  it("accepts the last round of a phase that ended before expiry", async function () {
+    const { cover, buyer, priceFeed } = await loadFundedCover();
+    const { policyId } = await buyCover(cover, buyer);
+    const expiry = await expiryOf(cover, policyId);
+    const lastRoundOfOldPhase = await pushRoundAt(priceFeed, CRASHED_PRICE, expiry - 60n);
+    await priceFeed.startNextPhase();
+    await time.increaseTo(expiry + 900n);
+    await pushRoundAt(priceFeed, RISEN_PRICE, expiry + 600n);
+
+    await expect(cover.resolve(policyId)).to.be.revertedWithCustomError(cover, "NoRoundFoundBefore");
+    await expect(cover.resolveWithRound(policyId, lastRoundOfOldPhase)).to.changeEtherBalance(buyer, PAYOUT);
+  });
+
   it("rejects an earlier round", async function () {
     const { cover, policyId, expiry, roundBeforeExpiry } = await policyWithRoundsAroundExpiry();
 
@@ -205,7 +226,7 @@ describe("PriceDropCover: payouts the holder cannot receive", function () {
     expect((await cover.policies(policyId)).status).to.equal(PolicyStatus.PaidOut);
     expect(await cover.lockedCapital()).to.equal(0n);
     expect(await cover.unclaimedPayoutOf(policyId)).to.equal(PAYOUT);
-    expect(await cover.totalAssets()).to.equal(assetsBefore - PAYOUT);
+    expect(await cover.totalAssets()).to.equal(assetsBefore - PAYOUT + RESOLUTION_FEE);
   });
 
   it("lets the holder claim the payout later", async function () {
@@ -239,6 +260,20 @@ describe("PriceDropCover: payouts the holder cannot receive", function () {
 });
 
 describe("PriceDropCover: voiding a policy nobody can resolve", function () {
+  it("releases the reserved resolution fee to the pool at settlement", async function () {
+    const { cover, buyer, priceFeed, scheduleService } = await loadFundedCover();
+    const { policyId } = await buyCover(cover, buyer);
+    const expiry = await expiryOf(cover, policyId);
+    await pushRoundAt(priceFeed, RISEN_PRICE, expiry - 60n);
+    await time.increaseTo(expiry);
+    const assetsBefore = await cover.totalAssets();
+
+    await scheduleService.execute(0n);
+
+    expect(await cover.reservedResolutionFees()).to.equal(0n);
+    expect(await cover.totalAssets()).to.equal(assetsBefore + RESOLUTION_FEE);
+  });
+
   it("refunds the premium once the void delay has passed", async function () {
     const { cover, buyer, stranger } = await loadFundedCover();
     const { policyId, premium } = await buyCover(cover, buyer);

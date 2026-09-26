@@ -18,7 +18,7 @@ const DEFAULT_TERMS = {
   coverPeriod: ONE_WEEK,
   maxPriceAge: 3 * ONE_HOUR,
   resolutionGasLimit: 250_000,
-  resolutionFee: TINYBARS_PER_HBAR / 2,
+  resolutionFee: TINYBARS_PER_HBAR,
 };
 
 const DEFAULT_POLICY_TOKEN_CREATION_FEE_HBAR = "15";

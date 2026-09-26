@@ -11,6 +11,7 @@ library ChainlinkRounds {
     }
 
     uint80 private constant AGGREGATOR_ROUND_MASK = type(uint64).max;
+    uint256 private constant PHASE_ID_SHIFT = 64;
 
     error NoRoundFoundBefore(uint256 timestamp);
     error RoundNotLastBefore(uint80 roundId, uint256 timestamp);
@@ -50,11 +51,22 @@ library ChainlinkRounds {
         uint256 timestamp
     ) private view returns (bool) {
         if (latest(feed).id == roundId) return true;
-        try feed.getRoundData(roundId + 1) returns (uint80, int256, uint256, uint256 nextUpdatedAt, uint80) {
-            return nextUpdatedAt > timestamp;
+        uint256 nextUpdatedAt = _updatedAtOrZero(feed, roundId + 1);
+        if (nextUpdatedAt == 0) nextUpdatedAt = _updatedAtOrZero(feed, _firstRoundOfNextPhase(roundId));
+        return nextUpdatedAt > timestamp;
+    }
+
+    function _updatedAtOrZero(AggregatorV3Interface feed, uint80 roundId) private view returns (uint256) {
+        try feed.getRoundData(roundId) returns (uint80, int256, uint256, uint256 updatedAt, uint80) {
+            return updatedAt;
         } catch {
-            return false;
+            return 0;
         }
+    }
+
+    function _firstRoundOfNextPhase(uint80 roundId) private pure returns (uint80) {
+        uint80 nextPhaseId = (roundId >> PHASE_ID_SHIFT) + 1;
+        return (nextPhaseId << PHASE_ID_SHIFT) | 1;
     }
 
     function _round(AggregatorV3Interface feed, uint80 roundId) private view returns (Round memory) {

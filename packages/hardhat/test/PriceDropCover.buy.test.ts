@@ -164,13 +164,14 @@ describe("PriceDropCover: buying cover", function () {
       .withArgs(premium + RESOLUTION_FEE, premium);
   });
 
-  it("keeps the resolution fee in the contract to pay for the scheduled call", async function () {
+  it("reserves the resolution fee for the scheduled call", async function () {
     const { cover, buyer } = await loadFundedCover();
     const assetsBefore = await cover.totalAssets();
 
     const { premium } = await buyCover(cover, buyer);
 
-    expect(await cover.totalAssets()).to.equal(assetsBefore + premium + RESOLUTION_FEE);
+    expect(await cover.totalAssets()).to.equal(assetsBefore + premium);
+    expect(await cover.reservedResolutionFees()).to.equal(RESOLUTION_FEE);
   });
 
   it("rejects a payout larger than the free capital", async function () {
@@ -180,7 +181,7 @@ describe("PriceDropCover: buying cover", function () {
 
     await expect(cover.connect(buyer).buyCover(payout, { value: premium + RESOLUTION_FEE }))
       .to.be.revertedWithCustomError(cover, "InsufficientFreeCapital")
-      .withArgs(payout, POOL_DEPOSIT + premium + RESOLUTION_FEE);
+      .withArgs(payout, POOL_DEPOSIT + premium);
   });
 
   it("rejects a zero payout", async function () {
