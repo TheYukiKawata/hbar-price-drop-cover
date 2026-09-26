@@ -1,7 +1,7 @@
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { MockAggregator, PriceDropCover } from "../typechain-types";
+import { MockAggregator, MockPolicyNft, PolicyHolderWallet, PriceDropCover } from "../typechain-types";
 import { buyCover, loadFundedCover, MAX_PRICE_AGE, OPENING_PRICE, PAYOUT, PolicyStatus } from "./coverFixture";
 
 const CRASHED_PRICE = ethers.parseUnits("0.05", 8);
@@ -108,6 +108,17 @@ describe("PriceDropCover: resolving cover", function () {
     await expect(cover.resolve(42n)).to.be.revertedWithCustomError(cover, "PolicyNotActive").withArgs(42n);
   });
 
+  it("voids the policy when the price at expiry is not positive", async function () {
+    const { cover, buyer, priceFeed } = await loadFundedCover();
+    const { policyId, premium } = await buyCover(cover, buyer);
+    const expiry = await expiryOf(cover, policyId);
+    await pushRoundAt(priceFeed, 0n, expiry - 60n);
+    await time.increaseTo(expiry);
+
+    await expect(cover.resolve(policyId)).to.changeEtherBalance(buyer, premium);
+    expect((await cover.policies(policyId)).status).to.equal(PolicyStatus.Voided);
+  });
+
   it("asks for a round proof when the round at expiry is too far back", async function () {
     const { cover, buyer, priceFeed } = await loadFundedCover();
     const { policyId } = await buyCover(cover, buyer);
@@ -166,5 +177,87 @@ describe("PriceDropCover: resolving with a round proof", function () {
 
     await expect(cover.resolveWithRound(policyId, staleRound)).to.changeEtherBalance(buyer, premium);
     expect((await cover.policies(policyId)).status).to.equal(PolicyStatus.Voided);
+  });
+});
+
+describe("PriceDropCover: payouts the holder cannot receive", function () {
+  async function crashedPolicyHeldByWallet() {
+    const fixture = await loadFundedCover();
+    const { cover, buyer, priceFeed, policyToken } = fixture;
+    const { policyId } = await buyCover(cover, buyer);
+    const wallet = (await ethers.deployContract("PolicyHolderWallet")) as unknown as PolicyHolderWallet;
+    await wallet.associate(policyToken as unknown as MockPolicyNft);
+    await policyToken.connect(buyer).transferFrom(buyer.address, await wallet.getAddress(), policyId);
+    const expiry = await expiryOf(cover, policyId);
+    await pushRoundAt(priceFeed, CRASHED_PRICE, expiry - 60n);
+    await time.increaseTo(expiry);
+    return { ...fixture, policyId, wallet };
+  }
+
+  it("settles the policy and holds the payout for the holder", async function () {
+    const { cover, policyId, wallet } = await crashedPolicyHeldByWallet();
+    const assetsBefore = await cover.totalAssets();
+
+    await expect(cover.resolve(policyId))
+      .to.emit(cover, "PayoutUnclaimed")
+      .withArgs(policyId, await wallet.getAddress(), PAYOUT);
+
+    expect((await cover.policies(policyId)).status).to.equal(PolicyStatus.PaidOut);
+    expect(await cover.lockedCapital()).to.equal(0n);
+    expect(await cover.unclaimedPayoutOf(policyId)).to.equal(PAYOUT);
+    expect(await cover.totalAssets()).to.equal(assetsBefore - PAYOUT);
+  });
+
+  it("lets the holder claim the payout later", async function () {
+    const { cover, policyId, wallet } = await crashedPolicyHeldByWallet();
+    await cover.resolve(policyId);
+    await wallet.setAcceptsHbar(true);
+
+    await expect(wallet.claimPayout(await cover.getAddress(), policyId)).to.changeEtherBalance(wallet, PAYOUT);
+
+    expect(await cover.unclaimedPayoutOf(policyId)).to.equal(0n);
+    expect(await cover.unclaimedPayouts()).to.equal(0n);
+  });
+
+  it("lets only the holder claim", async function () {
+    const { cover, policyId, wallet, stranger } = await crashedPolicyHeldByWallet();
+    await cover.resolve(policyId);
+
+    await expect(cover.connect(stranger).claimPayout(policyId))
+      .to.be.revertedWithCustomError(cover, "NotPolicyHolder")
+      .withArgs(policyId, await wallet.getAddress());
+  });
+
+  it("rejects a claim when nothing is owed", async function () {
+    const { cover, buyer } = await loadFundedCover();
+    const { policyId } = await buyCover(cover, buyer);
+
+    await expect(cover.connect(buyer).claimPayout(policyId))
+      .to.be.revertedWithCustomError(cover, "NothingToClaim")
+      .withArgs(policyId);
+  });
+});
+
+describe("PriceDropCover: voiding a policy nobody can resolve", function () {
+  it("refunds the premium once the void delay has passed", async function () {
+    const { cover, buyer, stranger } = await loadFundedCover();
+    const { policyId, premium } = await buyCover(cover, buyer);
+    await time.increaseTo((await expiryOf(cover, policyId)) + (await cover.UNRESOLVED_VOID_DELAY()));
+
+    await expect(cover.connect(stranger).voidUnresolved(policyId)).to.changeEtherBalance(buyer, premium);
+
+    expect((await cover.policies(policyId)).status).to.equal(PolicyStatus.Voided);
+    expect(await cover.lockedCapital()).to.equal(0n);
+  });
+
+  it("waits for the void delay after expiry", async function () {
+    const { cover, buyer } = await loadFundedCover();
+    const { policyId } = await buyCover(cover, buyer);
+    const voidableAt = (await expiryOf(cover, policyId)) + (await cover.UNRESOLVED_VOID_DELAY());
+    await time.increaseTo(voidableAt - 10n);
+
+    await expect(cover.voidUnresolved(policyId))
+      .to.be.revertedWithCustomError(cover, "VoidTooEarly")
+      .withArgs(policyId, voidableAt);
   });
 });

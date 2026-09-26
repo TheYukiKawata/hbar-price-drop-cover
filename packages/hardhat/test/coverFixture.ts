@@ -13,6 +13,7 @@ export const PREMIUM_BPS = 500n;
 export const COVER_PERIOD = 7n * 24n * 60n * 60n;
 export const MAX_PRICE_AGE = 2n * 60n * 60n;
 export const RESOLUTION_GAS_LIMIT = 400_000n;
+export const RESOLUTION_FEE = ethers.parseEther("0.5");
 export const TOKEN_CREATION_FEE = ethers.parseEther("10");
 export const POOL_DEPOSIT = ethers.parseEther("1000");
 export const PAYOUT = ethers.parseEther("100");
@@ -45,6 +46,7 @@ async function deployCoverWithoutToken() {
       coverPeriod: COVER_PERIOD,
       maxPriceAge: MAX_PRICE_AGE,
       resolutionGasLimit: RESOLUTION_GAS_LIMIT,
+      resolutionFee: RESOLUTION_FEE,
     },
   ])) as unknown as PriceDropCover;
 
@@ -75,7 +77,7 @@ export function loadFundedCover() {
 
 export async function buyCover(cover: PriceDropCover, buyer: HardhatEthersSigner, payout = PAYOUT) {
   const [premium] = await cover.quote(payout);
-  const receipt = await (await cover.connect(buyer).buyCover(payout, { value: premium })).wait();
+  const receipt = await (await cover.connect(buyer).buyCover(payout, { value: premium + RESOLUTION_FEE })).wait();
   const coverBought = receipt!.logs
     .map(log => cover.interface.parseLog(log))
     .find(parsed => parsed?.name === "CoverBought");

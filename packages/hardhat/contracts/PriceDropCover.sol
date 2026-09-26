@@ -34,11 +34,14 @@ contract PriceDropCover is UnderwriterPool {
         uint256 coverPeriod;
         uint256 maxPriceAge;
         uint256 resolutionGasLimit;
+        uint256 resolutionFee;
     }
 
     uint256 private constant BPS = 10_000;
     uint256 private constant MAX_ROUND_LOOKBACK = 24;
     uint256 private constant MAX_SCHEDULE_DELAY = 30;
+    uint256 private constant PAYOUT_GAS_LIMIT = 50_000;
+    uint256 public constant UNRESOLVED_VOID_DELAY = 7 days;
     uint256 private constant SUPPLY_KEY = 16;
     int64 private constant POLICY_TOKEN_AUTO_RENEW_PERIOD = 7_776_000;
     bytes private constant POLICY_METADATA = "HBAR price-drop cover";
@@ -49,9 +52,11 @@ contract PriceDropCover is UnderwriterPool {
     uint256 public immutable coverPeriod;
     uint256 public immutable maxPriceAge;
     uint256 public immutable resolutionGasLimit;
+    uint256 public immutable resolutionFee;
 
     address public policyToken;
     mapping(uint256 policyId => Policy) public policies;
+    mapping(uint256 policyId => uint256 amount) public unclaimedPayoutOf;
 
     event PolicyTokenCreated(address indexed token);
     event CoverBought(
@@ -71,6 +76,8 @@ contract PriceDropCover is UnderwriterPool {
         address holder,
         uint256 amountPaid
     );
+    event PayoutUnclaimed(uint256 indexed policyId, address indexed holder, uint256 amount);
+    event PayoutClaimed(uint256 indexed policyId, address indexed holder, uint256 amount);
 
     error InvalidTerms();
     error PolicyTokenAlreadyCreated(address token);
@@ -78,10 +85,13 @@ contract PriceDropCover is UnderwriterPool {
     error HederaCallFailed(string operation, int64 responseCode);
     error StalePrice(uint256 updatedAt);
     error InvalidPrice(int256 answer);
-    error WrongPremium(uint256 expected, uint256 received);
+    error WrongPayment(uint256 expected, uint256 received);
     error NoScheduleCapacity(uint256 expiry);
     error PolicyNotActive(uint256 policyId);
     error CoverNotExpired(uint256 policyId, uint256 expiry);
+    error VoidTooEarly(uint256 policyId, uint256 voidableAt);
+    error NothingToClaim(uint256 policyId);
+    error NotPolicyHolder(uint256 policyId, address holder);
 
     constructor(CoverTerms memory terms) {
         bool validBps = terms.triggerDropBps > 0 &&
@@ -97,16 +107,21 @@ contract PriceDropCover is UnderwriterPool {
         coverPeriod = terms.coverPeriod;
         maxPriceAge = terms.maxPriceAge;
         resolutionGasLimit = terms.resolutionGasLimit;
+        resolutionFee = terms.resolutionFee;
     }
 
     function createPolicyToken() external payable {
         if (policyToken != address(0)) revert PolicyTokenAlreadyCreated(policyToken);
+        uint256 balanceBeforeFee = address(this).balance - msg.value;
 
         (int64 responseCode, address token) = HTS.createNonFungibleToken{ value: msg.value }(_policyTokenDefinition());
         if (responseCode != HEDERA_SUCCESS) revert HederaCallFailed("createNonFungibleToken", responseCode);
 
         policyToken = token;
         emit PolicyTokenCreated(token);
+
+        uint256 unusedFee = address(this).balance - balanceBeforeFee;
+        if (unusedFee > 0) _sendHbar(msg.sender, unusedFee);
     }
 
     function quote(uint256 payout) public view returns (uint256 premium, int256 strikePrice) {
@@ -119,7 +134,8 @@ contract PriceDropCover is UnderwriterPool {
         if (payout == 0) revert ZeroAmount();
 
         (uint256 premium, int256 strikePrice) = quote(payout);
-        if (msg.value != premium) revert WrongPremium(premium, msg.value);
+        uint256 price = premium + resolutionFee;
+        if (msg.value != price) revert WrongPayment(price, msg.value);
         _lockCapital(payout);
 
         uint256 expiry = block.timestamp + coverPeriod;
@@ -147,15 +163,52 @@ contract PriceDropCover is UnderwriterPool {
         _resolve(policyId, policy, ChainlinkRounds.verifyLastRoundBefore(priceFeed, policy.expiry, roundId));
     }
 
-    function _resolve(uint256 policyId, Policy storage policy, ChainlinkRounds.Round memory round) private {
-        address holder = IERC721(policyToken).ownerOf(policyId);
-        (PolicyStatus outcome, uint256 amountPaid) = _outcome(policy, round);
+    function voidUnresolved(uint256 policyId) external {
+        Policy storage policy = _expiredActivePolicy(policyId);
+        uint256 voidableAt = policy.expiry + UNRESOLVED_VOID_DELAY;
+        if (block.timestamp < voidableAt) revert VoidTooEarly(policyId, voidableAt);
+        _settle(policyId, policy, PolicyStatus.Voided, policy.premium, ChainlinkRounds.Round(0, 0, 0));
+    }
 
+    function claimPayout(uint256 policyId) external {
+        uint256 amount = unclaimedPayoutOf[policyId];
+        if (amount == 0) revert NothingToClaim(policyId);
+        address holder = IERC721(policyToken).ownerOf(policyId);
+        if (msg.sender != holder) revert NotPolicyHolder(policyId, holder);
+
+        unclaimedPayoutOf[policyId] = 0;
+        _releaseUnclaimedPayout(amount);
+        emit PayoutClaimed(policyId, holder, amount);
+        _sendHbar(holder, amount);
+    }
+
+    function _resolve(uint256 policyId, Policy storage policy, ChainlinkRounds.Round memory round) private {
+        (PolicyStatus outcome, uint256 amountPaid) = _outcome(policy, round);
+        _settle(policyId, policy, outcome, amountPaid, round);
+    }
+
+    function _settle(
+        uint256 policyId,
+        Policy storage policy,
+        PolicyStatus outcome,
+        uint256 amountPaid,
+        ChainlinkRounds.Round memory round
+    ) private {
+        address holder = IERC721(policyToken).ownerOf(policyId);
         policy.status = outcome;
         _unlockCapital(policy.payout);
         emit PolicyResolved(policyId, outcome, round.id, round.answer, holder, amountPaid);
 
-        if (amountPaid > 0) _sendHbar(holder, amountPaid);
+        if (amountPaid > 0) _payHolder(policyId, holder, amountPaid);
+    }
+
+    function _payHolder(uint256 policyId, address holder, uint256 amount) private {
+        (bool sent, ) = holder.call{ value: amount, gas: PAYOUT_GAS_LIMIT }("");
+        if (sent) return;
+
+        unclaimedPayoutOf[policyId] = amount;
+        _holdUnclaimedPayout(amount);
+        emit PayoutUnclaimed(policyId, holder, amount);
     }
 
     function _outcome(
@@ -163,6 +216,7 @@ contract PriceDropCover is UnderwriterPool {
         ChainlinkRounds.Round memory round
     ) private view returns (PolicyStatus outcome, uint256 amountPaid) {
         if (policy.expiry - round.updatedAt > maxPriceAge) return (PolicyStatus.Voided, policy.premium);
+        if (round.answer <= 0) return (PolicyStatus.Voided, policy.premium);
         if (round.answer < policy.strikePrice) return (PolicyStatus.PaidOut, policy.payout);
         return (PolicyStatus.Expired, 0);
     }

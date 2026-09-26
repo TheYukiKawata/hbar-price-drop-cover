@@ -8,6 +8,7 @@ const CHAINLINK_HBAR_USD_FEEDS: Record<string, string> = {
   hederaMainnet: "0xAF685FB45C12b92b5054ccb9313e135525F9b5d5",
 };
 
+const TINYBARS_PER_HBAR = 100_000_000;
 const ONE_HOUR = 60 * 60;
 const ONE_WEEK = 7 * 24 * ONE_HOUR;
 
@@ -17,6 +18,7 @@ const DEFAULT_TERMS = {
   coverPeriod: ONE_WEEK,
   maxPriceAge: 3 * ONE_HOUR,
   resolutionGasLimit: 250_000,
+  resolutionFee: TINYBARS_PER_HBAR / 2,
 };
 
 const DEFAULT_POLICY_TOKEN_CREATION_FEE_HBAR = "15";

@@ -12,6 +12,7 @@ import {
   POOL_DEPOSIT,
   PolicyStatus,
   PREMIUM_BPS,
+  RESOLUTION_FEE,
   RESOLUTION_GAS_LIMIT,
   TOKEN_CREATION_FEE,
   TRIGGER_DROP_BPS,
@@ -30,6 +31,7 @@ describe("PriceDropCover: terms and policy token", function () {
       coverPeriod: COVER_PERIOD,
       maxPriceAge: MAX_PRICE_AGE,
       resolutionGasLimit: RESOLUTION_GAS_LIMIT,
+      resolutionFee: RESOLUTION_FEE,
     };
     const invalidTerms = [
       { ...validTerms, priceFeed: ethers.ZeroAddress },
@@ -95,9 +97,10 @@ describe("PriceDropCover: buying cover", function () {
     const { cover, buyer, policyToken } = await loadFundedCover();
     const [premium, strikePrice] = await cover.quote(PAYOUT);
 
-    const purchase = cover.connect(buyer).buyCover(PAYOUT, { value: premium });
+    const price = premium + RESOLUTION_FEE;
+    const purchase = cover.connect(buyer).buyCover(PAYOUT, { value: price });
 
-    await expect(purchase).to.changeEtherBalances([buyer, cover], [-premium, premium]);
+    await expect(purchase).to.changeEtherBalances([buyer, cover], [-price, price]);
     await expect(purchase).to.emit(cover, "CoverBought");
     const expiry = BigInt(await time.latest()) + COVER_PERIOD;
     const policy = await cover.policies(1n);
@@ -147,18 +150,27 @@ describe("PriceDropCover: buying cover", function () {
     const [premium] = await cover.quote(PAYOUT);
     await time.setNextBlockTimestamp(purchaseTime);
 
-    await expect(cover.connect(buyer).buyCover(PAYOUT, { value: premium }))
+    await expect(cover.connect(buyer).buyCover(PAYOUT, { value: premium + RESOLUTION_FEE }))
       .to.be.revertedWithCustomError(cover, "NoScheduleCapacity")
       .withArgs(expiry);
   });
 
-  it("requires the exact premium", async function () {
+  it("requires the premium plus the resolution fee", async function () {
     const { cover, buyer } = await loadFundedCover();
     const [premium] = await cover.quote(PAYOUT);
 
-    await expect(cover.connect(buyer).buyCover(PAYOUT, { value: premium - 1n }))
-      .to.be.revertedWithCustomError(cover, "WrongPremium")
-      .withArgs(premium, premium - 1n);
+    await expect(cover.connect(buyer).buyCover(PAYOUT, { value: premium }))
+      .to.be.revertedWithCustomError(cover, "WrongPayment")
+      .withArgs(premium + RESOLUTION_FEE, premium);
+  });
+
+  it("keeps the resolution fee in the contract to pay for the scheduled call", async function () {
+    const { cover, buyer } = await loadFundedCover();
+    const assetsBefore = await cover.totalAssets();
+
+    const { premium } = await buyCover(cover, buyer);
+
+    expect(await cover.totalAssets()).to.equal(assetsBefore + premium + RESOLUTION_FEE);
   });
 
   it("rejects a payout larger than the free capital", async function () {
@@ -166,9 +178,9 @@ describe("PriceDropCover: buying cover", function () {
     const payout = POOL_DEPOSIT * 2n;
     const [premium] = await cover.quote(payout);
 
-    await expect(cover.connect(buyer).buyCover(payout, { value: premium }))
+    await expect(cover.connect(buyer).buyCover(payout, { value: premium + RESOLUTION_FEE }))
       .to.be.revertedWithCustomError(cover, "InsufficientFreeCapital")
-      .withArgs(payout, POOL_DEPOSIT + premium);
+      .withArgs(payout, POOL_DEPOSIT + premium + RESOLUTION_FEE);
   });
 
   it("rejects a zero payout", async function () {
@@ -197,7 +209,7 @@ describe("PriceDropCover: buying cover", function () {
     const { cover, stranger } = await loadFundedCover();
     const [premium] = await cover.quote(PAYOUT);
 
-    await expect(cover.connect(stranger).buyCover(PAYOUT, { value: premium }))
+    await expect(cover.connect(stranger).buyCover(PAYOUT, { value: premium + RESOLUTION_FEE }))
       .to.be.revertedWithCustomError(cover, "HederaCallFailed")
       .withArgs("transferNFT", TOKEN_NOT_ASSOCIATED_TO_ACCOUNT);
   });

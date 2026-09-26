@@ -6,20 +6,23 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 abstract contract UnderwriterPool {
     uint256 public totalShares;
     uint256 public lockedCapital;
+    uint256 public unclaimedPayouts;
     mapping(address underwriter => uint256 shares) public sharesOf;
 
     event Deposited(address indexed underwriter, uint256 amount, uint256 shares);
     event Withdrawn(address indexed underwriter, uint256 amount, uint256 shares);
 
     error ZeroAmount();
+    error ZeroShares(uint256 amount);
     error InsufficientShares(uint256 requested, uint256 owned);
     error InsufficientFreeCapital(uint256 requested, uint256 available);
     error HbarTransferFailed(address recipient, uint256 amount);
 
     function deposit() external payable returns (uint256 shares) {
         if (msg.value == 0) revert ZeroAmount();
-        uint256 assetsBeforeDeposit = totalAssets() - msg.value;
+        uint256 assetsBeforeDeposit = _saturatingSub(totalAssets(), msg.value);
         shares = Math.mulDiv(msg.value, totalShares + 1, assetsBeforeDeposit + 1);
+        if (shares == 0) revert ZeroShares(msg.value);
         sharesOf[msg.sender] += shares;
         totalShares += shares;
         emit Deposited(msg.sender, msg.value, shares);
@@ -30,7 +33,7 @@ abstract contract UnderwriterPool {
         uint256 owned = sharesOf[msg.sender];
         if (shares > owned) revert InsufficientShares(shares, owned);
         amount = previewRedeem(shares);
-        _requireFreeCapital(amount);
+        if (amount == 0) revert ZeroAmount();
         sharesOf[msg.sender] = owned - shares;
         totalShares -= shares;
         emit Withdrawn(msg.sender, amount, shares);
@@ -38,16 +41,15 @@ abstract contract UnderwriterPool {
     }
 
     function totalAssets() public view returns (uint256) {
-        return address(this).balance;
+        return _saturatingSub(address(this).balance, unclaimedPayouts);
     }
 
     function freeCapital() public view returns (uint256) {
-        uint256 assets = totalAssets();
-        return assets > lockedCapital ? assets - lockedCapital : 0;
+        return _saturatingSub(totalAssets(), lockedCapital);
     }
 
     function previewRedeem(uint256 shares) public view returns (uint256) {
-        return Math.mulDiv(shares, totalAssets() + 1, totalShares + 1);
+        return Math.mulDiv(shares, freeCapital() + 1, totalShares + 1);
     }
 
     function assetsOf(address underwriter) external view returns (uint256) {
@@ -63,9 +65,21 @@ abstract contract UnderwriterPool {
         lockedCapital -= amount;
     }
 
+    function _holdUnclaimedPayout(uint256 amount) internal {
+        unclaimedPayouts += amount;
+    }
+
+    function _releaseUnclaimedPayout(uint256 amount) internal {
+        unclaimedPayouts -= amount;
+    }
+
     function _sendHbar(address recipient, uint256 amount) internal {
         (bool sent, ) = recipient.call{ value: amount }("");
         if (!sent) revert HbarTransferFailed(recipient, amount);
+    }
+
+    function _saturatingSub(uint256 minuend, uint256 subtrahend) private pure returns (uint256) {
+        return minuend > subtrahend ? minuend - subtrahend : 0;
     }
 
     function _requireFreeCapital(uint256 amount) private view {
