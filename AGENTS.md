@@ -20,7 +20,7 @@ yarn next:check-types && yarn hardhat:check-types
 yarn next:build
 yarn hardhat:compile
 yarn hardhat:deploy --network hederaTestnet    # deploys, creates the NFT collection, regenerates the ABI file
-yarn hardhat:verify:testnet <address>              # Sourcify; needs only the address
+yarn hardhat:verify:testnet                    # Sourcify; verifies the deployment in packages/hardhat/deployments
 yarn hardhat:account:generate                  # encrypted deployer key in packages/hardhat/.env
 yarn hardhat:account                           # deployer address and balances
 ```

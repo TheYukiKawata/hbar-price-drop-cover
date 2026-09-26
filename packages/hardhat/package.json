@@ -16,8 +16,8 @@
     "lint-staged": "eslint",
     "test": "REPORT_GAS=true hardhat test",
     "verify": "hardhat verify",
-    "verify:testnet": "hardhat verify --network hederaTestnet",
-    "verify:mainnet": "hardhat verify --network hederaMainnet"
+    "verify:testnet": "hardhat run --network hederaTestnet scripts/verifyOnSourcify.ts",
+    "verify:mainnet": "hardhat run --network hederaMainnet scripts/verifyOnSourcify.ts"
   },
   "devDependencies": {
     "@ethersproject/abi": "~5.7.0",
