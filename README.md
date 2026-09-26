@@ -19,18 +19,20 @@ The scaffolded app points at a contract that is already live on Hedera testnet, 
 | `ChainlinkRounds` | `packages/hardhat/contracts/chainlink/ChainlinkRounds.sol` | Finds and proves the Chainlink round that was live at a given time |
 | Cover page | `packages/nextjs/app/page.tsx` | Live price, quote, buy form, the connected wallet's policies |
 | Pool page | `packages/nextjs/app/pool/page.tsx` | Pool balances, deposit, withdraw |
-| Tests | `packages/hardhat/test/` | 36 unit tests with mocks of HTS, HSS and a Chainlink feed |
+| Tests | `packages/hardhat/test/` | 47 unit tests with mocks of HTS, HSS and a Chainlink feed |
 
 ## How a policy works
 
 1. An underwriter deposits HBAR into the pool and receives shares.
-2. A buyer asks for a payout, for example 50 HBAR. The contract reads the Chainlink HBAR/USD feed and sets the strike 10% below the live price. The premium is 2% of the payout.
+2. A buyer asks for a payout, for example 50 HBAR. The contract reads the Chainlink HBAR/USD feed and sets the strike 10% below the live price. The buyer pays a premium of 2% of the payout, plus a 0.5 HBAR fee for the scheduled settlement.
 3. The contract locks 50 HBAR of pool capital, mints a policy NFT on the Hedera Token Service, and sends it to the buyer.
 4. In the same transaction, the contract calls the Hedera Schedule Service (HIP-1215) to run `resolve(policyId)` at the expiry second.
 5. At expiry, Hedera runs the scheduled call. The contract finds the last Chainlink round published before expiry:
    - price below the strike: the NFT holder receives the payout;
    - price at or above the strike: the locked capital returns to the pool;
-   - no Chainlink update in the 3 hours before expiry: the policy is void and the premium goes back to the holder.
+   - no Chainlink update in the 3 hours before expiry, or a price of zero or less: the policy is void and the premium goes back to the holder.
+6. If the holder cannot receive HBAR, for example a contract without a `receive` function, the contract keeps the payout aside. The holder calls `claimPayout(policyId)` from an address that can receive HBAR.
+7. If nobody can settle a policy within 7 days after expiry, for example because the feed stopped, anyone can call `voidUnresolved(policyId)` to refund the premium and release the capital.
 
 ```mermaid
 sequenceDiagram
@@ -39,7 +41,7 @@ sequenceDiagram
     participant Feed as Chainlink HBAR/USD
     participant HTS as Hedera Token Service
     participant HSS as Hedera Schedule Service
-    Buyer->>Cover: buyCover(payout) + premium
+    Buyer->>Cover: buyCover(payout) + premium + fee
     Cover->>Feed: latestRoundData()
     Cover->>HTS: mintToken + transferNFT (policy NFT)
     Cover->>HSS: scheduleCall(resolve(policyId), expiry)
@@ -53,9 +55,9 @@ The policy NFT is the claim. If the buyer sells or sends the NFT, the new holder
 
 ## Why each integration is load-bearing
 
-**Chainlink Data Feeds.** Cover has no meaning without an agreed price at two moments: when the policy is sold, and when it expires. The contract reads `latestRoundData` for the strike. For settlement it walks back through `getRoundData` to the last round published before expiry, so a late resolution cannot use a later price. If the walk-back is too long, anyone can call `resolveWithRound(policyId, roundId)`; the contract accepts the round only if it started before expiry and the next round started after it.
+**Chainlink Data Feeds.** Cover has no meaning without an agreed price at two moments: when the policy is sold, and when it expires. The contract reads `latestRoundData` for the strike. For settlement it walks back through `getRoundData` to the last round published before expiry, so a late resolution cannot use a later price. The on-chain walk-back stops after 24 rounds. Past that, anyone can call `resolveWithRound(policyId, roundId)`; the contract accepts the round only if it started before expiry and the next round started after it. The app's **Resolve now** button finds that round off-chain with a binary search and always uses `resolveWithRound`.
 
-**Hedera Schedule Service.** Settlement at an exact second usually needs an off-chain keeper. Here the contract schedules its own call (`scheduleCall` on the system contract at `0x16b`) and checks `hasScheduleCapacity`, moving to the next free second when the expiry second is full. The pool pays the scheduled transaction's fee.
+**Hedera Schedule Service.** Settlement at an exact second usually needs an off-chain keeper. Here the contract schedules its own call (`scheduleCall` on the system contract at `0x16b`) and checks `hasScheduleCapacity`, moving to the next free second when the expiry second is full. The contract pays the scheduled transaction's fee from its balance, so each buyer prepays it with `resolutionFee`. Hedera charges at least 80% of the gas limit, so the fee must cover `resolutionGasLimit` × 0.8 × the gas price (about 0.23 HBAR for 250,000 gas at 114 tinybars per gas).
 
 **Hedera Token Service.** Each policy is a serial of one NFT collection that the contract created and controls through its supply key. HTS keeps ownership on the ledger, so the mirror node can list a wallet's policies without an indexer. Accounts that do not auto-associate tokens must associate the collection first; the app detects this and shows an **Associate** button that calls the token's HIP-719 `associate()` function.
 
@@ -121,6 +123,7 @@ The deploy script sets these terms. They are immutable after deployment.
 | --- | --- | --- |
 | `triggerDropBps` | 1000 | Strike is 10% below the price at purchase |
 | `premiumBps` | 200 | Premium is 2% of the payout |
+| `resolutionFee` | 0.5 HBAR | Added to the premium; pays for the scheduled `resolve` call |
 | `coverPeriod` | 7 days | Time from purchase to expiry |
 | `maxPriceAge` | 3 hours | Oldest Chainlink round accepted at purchase and at expiry |
 | `resolutionGasLimit` | 250,000 | Gas for the scheduled `resolve` call |
@@ -170,7 +173,9 @@ packages/
 - **The buy transaction fails with `transferNFT` and code 184.** Your account is not associated with the policy collection and has no free auto-association slots. Press **Associate** on the Cover page, then buy again.
 - **"No fresh Chainlink price".** The feed has not updated within `maxPriceAge`. Cover cannot be priced until it does.
 - **A policy shows "Awaiting resolution".** The scheduled call has not run yet or ran out of gas. Press **Resolve now**; anyone may resolve an expired policy.
-- **Withdraw is capped.** Capital that backs open policies stays locked until they resolve.
+- **A policy shows "Payout waiting for your claim".** The contract could not send the payout to the holder address. Press **Claim**.
+- **Withdraw pays less than the pool share.** A withdrawal is valued as if every open policy pays out. If the policies expire without a payout, that capital goes to the underwriters who stayed. This stops an underwriter from leaving just before a loss, or depositing just to collect a premium.
+- **A deposit fails with `ZeroShares`.** The deposit is too small to mint one share at the current share price.
 
 ## Links
 

@@ -37,7 +37,7 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 | `packages/hardhat/contracts/UnderwriterPool.sol` | Abstract pool: shares, deposits, withdrawals, locked capital |
 | `packages/hardhat/contracts/chainlink/` | `AggregatorV3Interface`, `ChainlinkRounds` library (round lookup and proof) |
 | `packages/hardhat/contracts/hedera/` | HTS and HSS interfaces, their addresses, `HEDERA_SUCCESS` |
-| `packages/hardhat/contracts/test/` | Mocks of HTS, HSS, the policy NFT, and a Chainlink aggregator. Tests only |
+| `packages/hardhat/contracts/test/` | Mocks of HTS, HSS, the policy NFT, a Chainlink aggregator, and a holder wallet. Tests only |
 | `packages/hardhat/deploy/00_deploy_price_drop_cover.ts` | Feed address per network, cover terms, collection creation |
 | `packages/hardhat/test/coverFixture.ts` | Installs the mocks at `0x167` and `0x16b`, funds the pool, buys cover |
 | `packages/nextjs/app/page.tsx` | Cover page |
@@ -63,8 +63,8 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 - The contract is the collection's treasury and supply key. Minting goes to the treasury, then `transferNFT` moves the serial to the buyer.
 - `createNonFungibleToken` needs HBAR for the fee (about 1 USD). Send it as `value`; the deploy script sends `POLICY_TOKEN_CREATION_FEE_HBAR`.
 - `scheduleCall` fails when the chosen second is full. `buyCover` asks `hasScheduleCapacity` and tries up to 30 seconds after expiry. Keep that check if you change scheduling.
-- The contract's own balance pays for scheduled transactions. The pool's `totalAssets` is the contract balance, so these fees come out of the pool.
-- Hedera charges at least 80% of the gas limit. Set gas limits close to real use. The frontend constants are `BUY_COVER_GAS_LIMIT` in `BuyCoverForm.tsx` and `RESOLVE_GAS_LIMIT` in `PolicyCard.tsx`; the scheduled call uses the `resolutionGasLimit` term.
+- The contract's own balance pays for scheduled transactions. Buyers prepay it: `buyCover` requires `quote` premium + `resolutionFee`. If you raise `resolutionGasLimit`, raise `resolutionFee` so it covers 80% of the gas limit at the network gas price.
+- Hedera charges at least 80% of the gas limit. Set gas limits close to real use. The frontend constants are `BUY_COVER_GAS_LIMIT` in `BuyCoverForm.tsx` and `SETTLEMENT_GAS_LIMIT` in `PolicyCard.tsx`; the scheduled call uses the `resolutionGasLimit` term.
 
 ### Chainlink
 
@@ -74,15 +74,17 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 
 ### Pool accounting
 
-- `lockedCapital` must equal the sum of payouts of active policies. Every path that ends a policy calls `_unlockCapital` exactly once.
-- Change status before any external call or HBAR transfer. `resolve` sets the status, unlocks, emits, then pays.
-- Share maths uses a virtual offset of 1 share and 1 tinybar to stop first-depositor inflation. Keep `Math.mulDiv` rounding in the pool's favour.
+- `lockedCapital` must equal the sum of payouts of active policies. Every path that ends a policy (`_settle`) calls `_unlockCapital` exactly once, and `voidUnresolved` is the escape when no round can settle a policy.
+- `unclaimedPayouts` is HBAR owed to holders whose payout send failed. `totalAssets` excludes it. Never let a failed send revert settlement; `_payHolder` records the amount for `claimPayout` instead.
+- Deposits price shares at `totalAssets`; withdrawals price them at `freeCapital`, as if every open policy pays out. Keep that asymmetry: it stops exits before a loss and deposits that only collect a premium.
+- Change status before any external call or HBAR transfer. `_settle` sets the status, unlocks, emits, then pays.
+- Share maths uses a virtual offset of 1 share and 1 tinybar, rounds in the pool's favour, and rejects deposits that mint zero shares.
 
 ## Changing the product
 
-- **Cover terms** (strike drop, premium, period, price age, gas): edit `DEFAULT_TERMS` in the deploy script. They are immutable per deployment, so redeploy. The frontend reads them from the contract.
+- **Cover terms** (strike drop, premium, period, price age, gas, resolution fee): edit `DEFAULT_TERMS` in the deploy script. They are immutable per deployment, so redeploy. The frontend reads them from the contract.
 - **Another feed**, for example ETH/USD: add the feed address to the deploy script map, and update the labels in `components/cover/CoverTerms.tsx` and `HbarUsdPrice.tsx`. The contract does not assume HBAR/USD, but payouts stay in HBAR.
-- **Premium model**: change `quote` in `PriceDropCover.sol`. Keep `buyCover` requiring the exact premium from `quote`, and update `PriceDropCover.buy.test.ts`.
+- **Premium model**: change `quote` in `PriceDropCover.sol`. Keep `buyCover` requiring the exact premium from `quote` plus `resolutionFee`, and update `PriceDropCover.buy.test.ts`.
 - **New contract function**: add a test in `packages/hardhat/test/`, deploy, then read it in the frontend through the Scaffold hooks. The ABI types come from `deployedContracts.ts`.
 
 ## Tests
@@ -90,6 +92,7 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 - `coverFixture.ts` writes mock bytecode to `0x167` and `0x16b` with `hardhat_setCode`. The mock HTS charges a 10 HBAR creation fee and returns 184 for unassociated receivers, like Hedera.
 - Execute a scheduled call with `MockHederaScheduleService.execute(index)`. Fill a second with `markSecondFull(second)`.
 - Publish prices with `MockAggregator.pushRound(answer, updatedAt)`. Answers have 8 decimals, like the testnet feed.
+- `PolicyHolderWallet` is a holder that can refuse HBAR, for the unclaimed payout tests.
 - Use `time.increaseTo` from `@nomicfoundation/hardhat-network-helpers` to reach expiry.
 
 ## Frontend
