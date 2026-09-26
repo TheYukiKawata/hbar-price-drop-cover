@@ -16,6 +16,8 @@ contract MockAggregator is AggregatorV3Interface {
     uint80 private nextRoundId = FIRST_ROUND_OF_PHASE_ONE;
     mapping(uint80 roundId => RoundData) private rounds;
 
+    error PhaseNotStarted(uint80 phaseId);
+
     constructor(uint8 decimals_) {
         decimals = decimals_;
     }
@@ -42,6 +44,8 @@ contract MockAggregator is AggregatorV3Interface {
     }
 
     function getRoundData(uint80 roundId) public view returns (uint80, int256, uint256, uint256, uint80) {
+        uint80 phaseId = roundId >> 64;
+        if (phaseId == 0 || phaseId > latestRoundId >> 64) revert PhaseNotStarted(phaseId);
         RoundData memory round = rounds[roundId];
         return (roundId, round.answer, round.updatedAt, round.updatedAt, roundId);
     }
