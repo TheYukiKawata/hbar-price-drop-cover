@@ -20,7 +20,7 @@ The tests run on the in-process Hardhat network. `test/coverFixture.ts` installs
 
    Or import an existing key with `yarn hardhat:account:import`.
 
-2. Fund the printed address with testnet HBAR from the [Hedera Portal faucet](https://portal.hedera.com/faucet). You need about 20 HBAR. Check the balance with `yarn hardhat:account`.
+2. Fund the printed address with testnet HBAR from the [Hedera Portal faucet](https://portal.hedera.com/faucet). You need about 30 HBAR. Check the balance with `yarn hardhat:account`.
 
 3. Deploy. You are asked for the key's password.
 
@@ -43,7 +43,7 @@ The tests run on the in-process Hardhat network. `test/coverFixture.ts` installs
 | `HEDERA_TESTNET_RPC_URL` | `https://testnet.hashio.io/api` | JSON-RPC for testnet |
 | `HEDERA_MAINNET_RPC_URL` | `https://mainnet.hashio.io/api` | JSON-RPC for mainnet |
 | `COVER_PERIOD_SECONDS` | `604800` | Cover length for a new deployment |
-| `POLICY_TOKEN_CREATION_FEE_HBAR` | `15` | HBAR sent to create the NFT collection |
+| `POLICY_TOKEN_CREATION_FEE_HBAR` | `25` | HBAR sent to create the NFT collection |
 
 ## Layout
 

@@ -61,7 +61,7 @@ Run `yarn lint`, both type checks, `yarn test`, and `yarn next:build` before you
 - HTS and HSS return a response code. Success is `22` (`HEDERA_SUCCESS`). Revert with `HederaCallFailed(op, code)` on anything else; do not ignore codes.
 - `184` is `TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`. A buyer must associate the policy collection, unless the account has free automatic association slots. The frontend checks the mirror node and calls HIP-719 `associate()` on the token address.
 - The contract is the collection's treasury and supply key. Minting goes to the treasury, then `transferNFT` moves the serial to the buyer.
-- `createNonFungibleToken` needs HBAR for the fee (about 1 USD). Send it as `value`; the deploy script sends `POLICY_TOKEN_CREATION_FEE_HBAR`.
+- `createNonFungibleToken` needs HBAR for the fee (about 1 USD). Send it as `value`; the deploy script sends `POLICY_TOKEN_CREATION_FEE_HBAR` and the contract refunds the unused part.
 - `scheduleCall` fails when the chosen second is full. `buyCover` asks `hasScheduleCapacity` and tries up to 30 seconds after expiry. Keep that check if you change scheduling.
 - The contract's own balance pays for scheduled transactions. Buyers prepay it: `buyCover` requires `quote` premium + `resolutionFee`. If you raise `resolutionGasLimit`, raise `resolutionFee` so it covers 80% of the gas limit at the network gas price.
 - Hedera charges at least 80% of the gas limit. Set gas limits close to real use. The frontend constants are `BUY_COVER_GAS_LIMIT` in `BuyCoverForm.tsx` and `SETTLEMENT_GAS_LIMIT` in `SettlementActions.tsx`; the scheduled call uses the `resolutionGasLimit` term.

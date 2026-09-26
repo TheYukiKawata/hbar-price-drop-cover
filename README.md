@@ -26,7 +26,7 @@ Deploy the contract to Hedera testnet with one command (see [Deploy your own cop
 1. An underwriter deposits HBAR into the pool and receives shares.
 2. A buyer asks for a payout, for example 50 HBAR, and passes the strike they were quoted as a minimum, so a price update before the purchase cannot lower it. The contract reads the Chainlink HBAR/USD feed and sets the strike 10% below the live price. The buyer pays a premium of 2% of the payout, plus a 1 HBAR fee for the scheduled settlement. The contract sets the fee aside until settlement, so underwriters cannot withdraw it.
 3. The contract locks 50 HBAR of pool capital, mints a policy NFT on the Hedera Token Service, and sends it to the buyer.
-4. In the same transaction, the contract calls the Hedera Schedule Service (HIP-1215) to run `resolve(policyId)` at the expiry second.
+4. In the same transaction, the contract calls the Hedera Schedule Service (HIP-1215) to run `resolve(policyId)` at the expiry second. The purchase uses about 2.6 million gas, mostly for the HTS mint, the NFT transfer and the schedule, so the buyer pays about 2.8 HBAR in transaction fees on testnet.
 5. At expiry, Hedera runs the scheduled call. The contract finds the last Chainlink round published before expiry:
    - price below the strike: the NFT holder receives the payout;
    - price at or above the strike: the locked capital returns to the pool;
@@ -93,7 +93,7 @@ yarn hardhat:account:generate        # stores an encrypted key in packages/hardh
 yarn hardhat:deploy --network hederaTestnet
 ```
 
-The deploy script deploys `PriceDropCover`, creates the policy NFT collection, and regenerates `packages/nextjs/contracts/deployedContracts.ts`. You need about 20 testnet HBAR: token creation costs about 1 USD in HBAR and the contract deployment costs about 3 HBAR. Deposit HBAR into the pool from the Pool page before you sell cover.
+The deploy script deploys `PriceDropCover`, creates the policy NFT collection, and regenerates `packages/nextjs/contracts/deployedContracts.ts`. You need about 30 testnet HBAR. The deployment costs about 3 HBAR. Token creation costs about 1 USD in HBAR; the script sends 25 HBAR and the contract refunds what the fee does not use. Deposit HBAR into the pool from the Pool page before you sell cover.
 
 To watch a policy resolve during a demo, deploy with a short cover period:
 
@@ -111,7 +111,7 @@ All variables are optional.
 | `HEDERA_MAINNET_RPC_URL` | `packages/hardhat/.env` | Hashio | JSON-RPC for mainnet deploys |
 | `DEPLOYER_PRIVATE_KEY_ENCRYPTED` | `packages/hardhat/.env` | none | Written by `yarn hardhat:account:generate` |
 | `COVER_PERIOD_SECONDS` | `packages/hardhat/.env` | `604800` (one week) | Cover length for new deployments |
-| `POLICY_TOKEN_CREATION_FEE_HBAR` | `packages/hardhat/.env` | `15` | HBAR sent with `createPolicyToken` |
+| `POLICY_TOKEN_CREATION_FEE_HBAR` | `packages/hardhat/.env` | `25` | HBAR sent with `createPolicyToken` |
 | `NEXT_PUBLIC_HEDERA_TESTNET_RPC_URL` | `packages/nextjs/.env.local` | Hashio | JSON-RPC for the app |
 | `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | `packages/nextjs/.env.local` | shared demo ID | WalletConnect |
 

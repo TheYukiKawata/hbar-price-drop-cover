@@ -21,7 +21,7 @@ const DEFAULT_TERMS = {
   resolutionFee: TINYBARS_PER_HBAR,
 };
 
-const DEFAULT_POLICY_TOKEN_CREATION_FEE_HBAR = "15";
+const DEFAULT_POLICY_TOKEN_CREATION_FEE_HBAR = "25";
 
 const deployPriceDropCover: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const priceFeed = CHAINLINK_HBAR_USD_FEEDS[hre.network.name];

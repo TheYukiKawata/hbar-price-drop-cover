@@ -12,7 +12,7 @@ import { formatTinybars, parseHbarToTinybars, tinybarsToWeibar } from "~~/utils/
 import { formatUsdPrice } from "~~/utils/cover/price";
 import { formatTimestamp, nowInSeconds } from "~~/utils/cover/time";
 
-const BUY_COVER_GAS_LIMIT = 800_000n;
+const BUY_COVER_GAS_LIMIT = 3_000_000n;
 
 export const BuyCoverForm = ({ terms }: { terms: CoverTerms }) => {
   const { isConnected } = useAccount();
