@@ -8,20 +8,9 @@ A Scaffold-HBAR template for parametric cover on Hedera. A buyer pays a premium 
 npm create scaffold-hbar@latest -- --template TheYukiKawata/hbar-price-drop-cover
 ```
 
-Deploy the contract to Hedera testnet with one command (see [Deploy your own copy](#deploy-your-own-copy)), then open the app to fund the pool and buy cover.
+Try the testnet deployment at https://hbarcover.yukikawata.fyi, or deploy your own copy (see [Deploy your own copy](#deploy-your-own-copy)).
 
 > This template is experimental and not audited. Use it on testnet. Do not put real money in it without a security review and your own pricing model.
-
-## What you get
-
-| Piece | Where | What it does |
-| --- | --- | --- |
-| `PriceDropCover` | `packages/hardhat/contracts/PriceDropCover.sol` | Sells policies, schedules their resolution, pays out |
-| `UnderwriterPool` | `packages/hardhat/contracts/UnderwriterPool.sol` | Holds underwriter HBAR as shares; locks capital behind open policies |
-| `ChainlinkRounds` | `packages/hardhat/contracts/chainlink/ChainlinkRounds.sol` | Finds and proves the Chainlink round that was live at a given time |
-| Cover page | `packages/nextjs/app/page.tsx` | Live price, quote, buy form, the connected wallet's policies |
-| Pool page | `packages/nextjs/app/pool/page.tsx` | Pool balances, deposit, withdraw |
-| Tests | `packages/hardhat/test/` | 55 unit tests with mocks of HTS, HSS and a Chainlink feed |
 
 ## How a policy works
 
@@ -55,7 +44,7 @@ sequenceDiagram
 
 The policy NFT is the claim. If the buyer sells or sends the NFT, the new holder receives the payout.
 
-## Why each integration is load-bearing
+## How it uses Chainlink and Hedera
 
 **Chainlink Data Feeds.** Cover has no meaning without an agreed price at two moments: when the policy is sold, and when it expires. The contract reads `latestRoundData` for the strike. For settlement it walks back through `getRoundData` to the last round published before expiry, so a late resolution cannot use a later price. The on-chain walk-back stops after 24 rounds. Past that, anyone can call `resolveWithRound(policyId, roundId)`; the contract accepts the round only if its `updatedAt` is at or before expiry, and every later round that exists, the next round in its phase and the first round of the next phase, has an `updatedAt` after expiry. At least one of those later rounds must exist, unless the round is the feed's latest round. The app's **Resolve now** button finds the round off-chain with a binary search across phases and calls `resolveWithRound`. If the search finds no round, it simulates `resolve` and sends it when the simulation succeeds.
 
@@ -97,6 +86,8 @@ yarn hardhat:verify:testnet          # publishes the source on Sourcify, shown o
 ```
 
 The deploy script deploys `PriceDropCover`, creates the policy NFT collection, and regenerates `packages/nextjs/contracts/deployedContracts.ts`. You need about 30 testnet HBAR. The deployment costs about 3 HBAR. Token creation costs about 1 USD in HBAR; the script sends 25 HBAR and the contract refunds what the fee does not use. Deposit HBAR into the pool from the Pool page before you sell cover.
+
+The app is a static site. To host it on Cloudflare Workers, run `yarn next:deploy`; it builds `packages/nextjs/out` and deploys it with `packages/nextjs/wrangler.jsonc`.
 
 To watch a policy resolve during a demo, deploy with a short cover period:
 
@@ -162,24 +153,6 @@ The contract in `deployedContracts.ts` runs on Hedera testnet with a 10-minute c
 | Hedera runs the scheduled `resolve(1)` 5 seconds after expiry, with no keeper | [transaction](https://hashscan.io/testnet/transaction/1790457468.053738952) |
 
 The HBAR price stayed above the strike, so policy #1 expired without a payout and its 5 HBAR returned to the pool.
-
-## Project layout
-
-```text
-packages/
-  hardhat/
-    contracts/            PriceDropCover, UnderwriterPool
-    contracts/chainlink/  feed interface and round lookup
-    contracts/hedera/     HTS and HSS interfaces and addresses
-    contracts/test/       mocks used only by tests
-    deploy/               hardhat-deploy script
-    test/                 unit tests
-  nextjs/
-    app/                  cover and pool pages
-    components/cover/     forms, policy list, pool stats
-    hooks/cover/          contract, feed and mirror node reads
-    utils/cover/          units, formatting, mirror node client
-```
 
 ## Troubleshooting
 
