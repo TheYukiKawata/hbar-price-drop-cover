@@ -7,7 +7,7 @@ const NETWORK_BY_CHAIN_ID: Record<number, HederaNetworkName> = {
   296: "testnet",
 };
 
-const MIRROR_NODE_URLS: Record<HederaNetworkName, string> = {
+export const MIRROR_NODE_URLS: Record<HederaNetworkName, string> = {
   testnet: "https://testnet.mirrornode.hedera.com",
   mainnet: "https://mainnet-public.mirrornode.hedera.com",
 };

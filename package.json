@@ -29,6 +29,7 @@
     "lint": "yarn next:lint && yarn hardhat:lint",
     "next:build": "yarn workspace @sh/nextjs build",
     "next:check-types": "yarn workspace @sh/nextjs check-types",
+    "next:deploy": "yarn workspace @sh/nextjs deploy",
     "next:dev": "yarn workspace @sh/nextjs dev",
     "next:format": "yarn workspace @sh/nextjs format",
     "next:lint": "yarn workspace @sh/nextjs lint",

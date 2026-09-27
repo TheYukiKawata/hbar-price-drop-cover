@@ -5,10 +5,11 @@
   "scripts": {
     "build": "next build",
     "check-types": "tsc --noEmit --incremental",
+    "deploy": "next build && npx wrangler deploy",
     "dev": "next dev",
     "format": "prettier --write . '!(node_modules|.next|contracts)/**/*'",
     "lint": "next lint",
-    "serve": "next start",
+    "serve": "npx wrangler dev",
     "start": "next dev"
   },
   "dependencies": {

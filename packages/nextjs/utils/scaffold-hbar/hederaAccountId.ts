@@ -1,6 +1,6 @@
-export type HederaNetwork = "testnet" | "mainnet";
+import { MIRROR_NODE_URLS } from "~~/utils/cover/hedera";
 
-type AccountIdResponse = { accountId: string | null } | { error: string };
+export type HederaNetwork = "testnet" | "mainnet";
 
 const CHAIN_ID_TO_NETWORK: Record<number, HederaNetwork> = {
   295: "mainnet",
@@ -23,16 +23,10 @@ export async function getHederaAccountId(
   evmAddress: string,
   network: HederaNetwork = "testnet",
 ): Promise<string | null> {
-  const params = new URLSearchParams({ evm: evmAddress, network });
-  const res = await fetch(`/api/hedera/account?${params}`);
+  const res = await fetch(`${MIRROR_NODE_URLS[network]}/api/v1/accounts/${evmAddress}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Mirror node request failed with HTTP ${res.status}`);
 
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as AccountIdResponse;
-    if ("error" in body) throw new Error(body.error);
-    return null;
-  }
-
-  const data = (await res.json()) as AccountIdResponse;
-  if ("error" in data) throw new Error(data.error);
-  return data.accountId;
+  const data = (await res.json()) as { account?: unknown };
+  return typeof data.account === "string" ? data.account : null;
 }
